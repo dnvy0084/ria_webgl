@@ -11,16 +11,26 @@
     <script type="x-shader/x-vertex" id="vs_src">
 
         attribute vec2 pos;
+        attribute vec3 color;
+
+        varying vec3 frag_color;
 
         void main(){
-            gl_Position = vec4( pos, 0, 1 );
+
+            frag_color = color;
+
+            gl_Position = vec4( pos.x, pos.y, 0, 1 );
         }
 
     </script>
     <script type="x-shader/x-fragment" id="fs_src">
 
+        precision highp float;
+
+        varying vec3 frag_color;
+
         void main(){
-            gl_FragColor = vec4(1,0,0,1);
+            gl_FragColor = vec4( 1, 1, 1, 1 ); //vec4(frag_color,1);
         }
 
     </script>
@@ -30,6 +40,7 @@
 
         var program;
         var buffer;
+        var indexBuffer;
 
         function init() {
 
@@ -82,13 +93,25 @@
             buffer = gl.createBuffer();
 
             var vertices = new Float32Array([
-                    0, 0.5,
-                    0.5, -0.5,
-                    -0.5, -0.5
-            ])
+                    -0.5, 0.5,    1, 0, 0, //
+                    0.5,  0.5,    0, 1, 0,
+                    0.5, -0.5,   0, 0, 1,
+                    -0.5, -0.5,  1, 0, 1,
+
+            ]);
+
+            indexBuffer = gl.createBuffer();
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
 
             gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
             gl.bufferData( gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW );
+
+
+            var indices = new Uint16Array([
+                    0, 1, 2,     0, 2, 3
+            ]);
+
+            gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW );
         }
 
         function draw() {
@@ -98,10 +121,15 @@
             gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
 
             var pos = gl.getAttribLocation( program, "pos" );
-            gl.enableVertexAttribArray( pos );
-            gl.vertexAttribPointer( pos, 2, gl.FLOAT, false, 2 * 4, 2 * 0 );
+            var color = gl.getAttribLocation( program, "color" );
 
-            gl.drawArrays( gl.TRIANGLES, 0, 3 );
+            gl.enableVertexAttribArray( pos );
+            gl.enableVertexAttribArray( color );
+            gl.vertexAttribPointer( pos, 2, gl.FLOAT, false, 5 * 4, 0 * 4 );
+            gl.vertexAttribPointer( color, 3, gl.FLOAT, false, 5 * 4, 2 * 4 );
+
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
         }
 
         window.onload = init;
@@ -111,7 +139,7 @@
 <body>
 <div class="wrapper">
     <h3 class="title">template</h3>
-    <canvas id="canvas" width="800" height="600"></canvas>
+    <canvas id="canvas" width="400" height="300"></canvas>
 </div>
 </body>
 </html>
