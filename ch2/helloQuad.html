@@ -11,16 +11,23 @@
 
     <script type="x-shader/x-vertex" id="vsSrc">
 
+        // https://github.com/dnvy0084/ria_webgl/
+
         attribute vec2 vertex;
 
         uniform vec2 stage;
         uniform vec2 position;
         uniform vec2 scale;
+        uniform float rotate;
 
         void main(){
 
             vec2 p = vertex;
 
+            float x = cos( rotate ) * p.x - sin( rotate ) * p.y;
+            float y = sin( rotate ) * p.x + cos( rotate ) * p.y;
+
+            p = vec2( x, y );
             p = p * scale;
             p = p + position;
 
@@ -33,8 +40,12 @@
 
     <script type="x-shader/x-vertex" id="fsSrc">
 
+        precision highp float;
+
+        uniform vec3 color;
+
         void main(){
-            gl_FragColor = vec4(1,0,0,1);
+            gl_FragColor = vec4(color,1);
         }
     </script>
 
@@ -123,10 +134,21 @@
 
             var position = gl.getUniformLocation( program, "position" );
             //gl.uniform2fv( position, new Float32Array([100, 100] ) )
-            gl.uniform2f( position, 100 * Math.cos( ms / 500 ) + 100, 100 );
+            gl.uniform2f( position, 100, 100 );//100 * Math.cos( ms / 500 ) + 100, 100 );
 
             var scale = gl.getUniformLocation( program, "scale" );
-            gl.uniform2f( scale, 2, 2 );
+            gl.uniform2f( scale, 1, 1 );//Math.cos( ms / 500 ) / 2 + 1, Math.cos( ms / 500 ) / 2 + 1 );
+
+            var rotate = gl.getUniformLocation( program, "rotate" );
+            gl.uniform1f( rotate, Math.PI / 4 );
+
+//            var color = gl.getUniformLocation( program, "color" );
+//            var colorValue = 0x0077aa;
+//
+//            gl.uniform3f( color,
+//                    (colorValue >> 16 & 0xff) / 255,
+//                    (colorValue >> 8 & 0xff) / 255,
+//                    ( colorValue & 0xff ) / 255 );
 
             gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
             gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
