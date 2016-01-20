@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style>
+        #canvas{
+            border:1px solid #ccc;
+        }
+    </style>
+
+    <script type="x-shader/x-vertex" id="vsSrc">
+
+        attribute vec2 vertex;
+
+        uniform vec2 stage;
+        uniform vec2 position;
+        uniform vec2 scale;
+        uniform float rotate;
+
+        void main(){
+
+            vec2 p = vertex;
+
+            float x = p.x * cos(rotate) - p.y * sin(rotate);
+            float y = p.x * sin(rotate) + p.y * cos(rotate);
+
+            p = vec2( x, y );
+            p = p * scale;
+            p = p + position;
+            p = p / stage * 2.0 - 1.0;
+
+            gl_Position = vec4( p.x, -p.y, 0, 1 );
+        }
+
+    </script>
+
+    <script type="x-shader/x-vertex" id="fsSrc">
+
+        void main(){
+            gl_FragColor = vec4(0,0,1,1);
+        }
+
+    </script>
+
+    <script type="text/javascript">
+
+        var gl;
+
+        var program, vertexBuffer, indexBuffer;
+
+        function init() {
+            gl = document.getElementById("canvas").getContext("webgl");
+            console.dir( gl );
+
+            makeProgram();
+            makeBuffer();
+
+            draw();
+        }
+
+        function makeProgram() {
+            program = gl.createProgram();
+
+            var vsSrc = document.getElementById("vsSrc").innerHTML;
+            var fsSrc = document.getElementById("fsSrc").innerHTML;
+
+            gl.attachShader( program, makeShader( gl.VERTEX_SHADER, vsSrc ) );
+            gl.attachShader( program, makeShader( gl.FRAGMENT_SHADER, fsSrc ) );
+
+            gl.linkProgram(program);
+
+            if(!gl.getProgramParameter(program,gl.LINK_STATUS))
+                throw new Error( "Link Error >", gl.getProgramInfoLog(program) );
+
+            gl.useProgram( program );
+        }
+
+        function makeShader(type, src) {
+
+            var shader = gl.createShader( type, src );
+            gl.shaderSource( shader, src );
+            gl.compileShader( shader );
+
+            if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS ) ){
+                throw new Error( "Compile Error >", gl.getShaderInfoLog(shader) );
+            }
+
+            return shader;
+        }
+
+        function makeBuffer() {
+
+            vertexBuffer = gl.createBuffer();
+            indexBuffer = gl.createBuffer();
+
+            var x = 0, y = 0, w = 250, h = 80;
+            var vertexData = new Float32Array([
+                    0, 0,
+                    w, 0,
+                    w, h,
+                    0, h
+            ]);
+
+            var indexData = new Uint16Array([
+                    0, 1, 2,   0, 2, 3
+            ]);
+
+
+            gl.bindBuffer( gl.ARRAY_BUFFER, vertexBuffer );
+            gl.bufferData( gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW );
+
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW );
+        }
+
+        function draw( ms ) {
+
+            requestAnimationFrame( draw );
+            gl.clear( gl.COLOR_BUFFER_BIT );
+
+            var vertex = gl.getAttribLocation( program, "vertex" );
+            gl.enableVertexAttribArray( vertex );
+
+            var stage = gl.getUniformLocation( program, "stage" );
+            gl.uniform2f( stage, gl.canvas.width, gl.canvas.height );
+
+            var position = gl.getUniformLocation( program, "position" );
+            gl.uniform2f( position, gl.canvas.width / 2, gl.canvas.height / 2 );//100 * Math.cos( ms / 500 ) + 100, 100 );
+
+            var scale = gl.getUniformLocation( program, "scale" );
+            gl.uniform2f( scale, 1, 1 );
+
+            var rotate = gl.getUniformLocation( program, "rotate" );
+            gl.uniform1f( rotate, ms / 1000 );
+
+            gl.bindBuffer( gl.ARRAY_BUFFER, vertexBuffer );
+            gl.vertexAttribPointer( vertex, 2, gl.FLOAT, false, 4 * 2, 4 * 0 );
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
+        }
+
+        window.onload = init;
+
+    </script>
+</head>
+<body>
+<div class="wrapper">
+    <h3 class="title">template</h3>
+    <canvas id="canvas" width="800" height="600"></canvas>
+</div>
+</body>
+</html>
