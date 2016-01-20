@@ -15,10 +15,16 @@
 
         uniform vec2 stage;
         uniform vec2 position;
+        uniform vec2 scale;
 
         void main(){
 
-            vec2 p = ( vertex + position ) / stage * 2.0 - 1.0;
+            vec2 p = vertex;
+
+            p = p * scale;
+            p = p + position;
+
+            p = p / stage * 2.0 - 1.0;
 
             gl_Position = vec4( p.x, -p.y, 0, 1 );
         }
@@ -118,6 +124,9 @@
             var position = gl.getUniformLocation( program, "position" );
             //gl.uniform2fv( position, new Float32Array([100, 100] ) )
             gl.uniform2f( position, 100 * Math.cos( ms / 500 ) + 100, 100 );
+
+            var scale = gl.getUniformLocation( program, "scale" );
+            gl.uniform2f( scale, 2, 2 );
 
             gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
             gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
