@@ -14,10 +14,11 @@
         attribute vec2 vertex;
 
         uniform vec2 stage;
+        uniform vec2 position;
 
         void main(){
 
-            vec2 p = vertex / stage * 2.0 - 1.0;
+            vec2 p = ( vertex + position ) / stage * 2.0 - 1.0;
 
             gl_Position = vec4( p.x, -p.y, 0, 1 );
         }
@@ -81,7 +82,7 @@
             vertexBuffer = gl.createBuffer();
             indexBuffer = gl.createBuffer();
 
-            var x = 100, y = 100, w = 200, h = 200;
+            var x = 0, y = 0, w = 200, h = 200;
             var vertexData = new Float32Array([
                     x, y,
                     x + w, y,
@@ -99,7 +100,9 @@
             gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW );
         }
 
-        function draw() {
+        function draw( ms ) {
+
+            requestAnimationFrame( draw );
 
             gl.clear( gl.COLOR_BUFFER_BIT );
 
@@ -111,6 +114,10 @@
 
             var stage = gl.getUniformLocation( program, "stage" );
             gl.uniform2f( stage, gl.canvas.width, gl.canvas.height );
+
+            var position = gl.getUniformLocation( program, "position" );
+            //gl.uniform2fv( position, new Float32Array([100, 100] ) )
+            gl.uniform2f( position, 100 * Math.cos( ms / 500 ) + 100, 100 );
 
             gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
             gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
