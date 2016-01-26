@@ -11,6 +11,9 @@
     <script type="x" id="vssrc">
 
         attribute vec2 vertex;
+        attribute vec2 uv;
+
+        varying vec2 frag_uv;
 
         uniform vec2 scale;
         uniform vec2 translate;
@@ -21,6 +24,8 @@
         void main(){
 
             vec2 p = vertex;
+
+            frag_uv = uv;
 
             float cos = cos(rotate);
             float sin = sin(rotate);
@@ -44,24 +49,32 @@
         precision highp float;
 
         uniform vec3 color;
+        uniform sampler2D tex;
+
+        varying vec2 frag_uv;
 
         void main(){
-            gl_FragColor = vec4( color,1 );
+
+            vec4 pixel = texture2D( tex, frag_uv );
+
+            gl_FragColor = pixel;
         }
     </script>
     <script type="text/javascript">
 
         var gl, program, indexBuffer, children = [];
 
-        function Quad(w, h, color) {
+        function Bitmap(img) {
 
             var buffer = gl.createBuffer();
+            var w = img.width;
+            var h = img.height;
 
             var bufferData = new Float32Array([
-                    0, 0,
-                    w, 0,
-                    w, h,
-                    0, h
+                    0, 0,   0, 0,
+                    w, 0,   1, 0,
+                    w, h,   1, 1,
+                    0, h,   0, 1
             ]);
 
             this.x = 0;
@@ -70,12 +83,19 @@
             this.scaleY = 1.0;
             this.rotate = 0.0;
 
-            var r = (color >> 16 & 0xff) / 255;
-            var g = (color >> 8 & 0xff) / 255;
-            var b = ( color & 0xff ) / 255;
-
             gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
             gl.bufferData( gl.ARRAY_BUFFER, bufferData, gl.STATIC_DRAW );
+
+
+            var tex = gl.createTexture();
+
+            gl.bindTexture( gl.TEXTURE_2D, tex );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
+            gl.texImage2D( gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img );
+
 
             this.render = function(){
 
@@ -85,9 +105,11 @@
                 gl.uniform2f( program.scale, this.scaleX, this.scaleY );
                 gl.uniform1f( program.rotate, this.rotate );
 
-                gl.uniform3f( program.color, r, g, b );
+                gl.bindTexture( gl.TEXTURE_2D, tex );
 
-                gl.vertexAttribPointer( program.vertex, 2, gl.FLOAT, false, 4 * 2, 0 );
+                gl.vertexAttribPointer( program.vertex, 2, gl.FLOAT, false, 4 * 4, 0 );
+                gl.vertexAttribPointer( program.uv, 2, gl.FLOAT, false, 4 * 4, 4 * 2 );
+
                 gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
                 gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
             };
@@ -99,16 +121,17 @@
 
             gl.clearColor( 0,0,0,1 );
 
+            var img = document.createElement( "img" );
+            img.src = "img/a.jpg";
+            img.onload = onLoad;
+        }
+
+        function onLoad(e) {
             makeProgram();
             makeBuffer();
 
-            var q = new Quad( 200, 100, 0xff );
-            children.push( q );
-            q.x = 100;
-            q.y = 100;
-
-            var q2 = new Quad( 50, 50, 0xff00 );
-            children.push( q2 );
+            var q = new Bitmap(e.target);
+            children.push(q);
 
             update();
         }
@@ -148,7 +171,7 @@
                 program[p] = gl.getUniformLocation( program, p );
             }
 
-            labels = [ "vertex" ];
+            labels = [ "vertex", "uv" ];
 
             for (var j = 0; j < labels.length; j++) {
                 p = labels[j];
