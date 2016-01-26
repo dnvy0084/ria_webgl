@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style>
+        #canvas{
+            border:1px solid #ccc;
+        }
+    </style>
+    <script type="x-shader/x-vertex" id="vsSrc">
+
+        attribute vec2 vertex;
+        attribute vec2 uv;
+
+        varying vec2 frag_uv;
+
+        uniform vec2 stage;
+        uniform vec2 translate;
+        uniform vec2 scale;
+        uniform float rotate;
+
+        void main(){
+
+            frag_uv = uv;
+
+            float cos = cos(rotate);
+            float sin = sin(rotate);
+
+            float x = cos * vertex.x - sin * vertex.y;
+            float y = sin * vertex.x + cos * vertex.y;
+
+            vec2 p = vec2(x,y);
+            p *= scale;
+            p += translate;
+            p = p / stage * 2.0 - 1.0;
+
+            gl_Position = vec4( p.x, -p.y, 0, 1 );
+        }
+
+    </script>
+    <script type="x-shader/x-fragment" id="fsSrc">
+
+        precision highp float;
+
+        uniform vec3 color;
+
+        varying vec2 frag_uv;
+
+        uniform sampler2D tex;
+
+        uniform float brightness;
+        uniform float contrast;
+
+        void main(){
+
+            vec3 pixel = texture2D( tex, frag_uv ).rgb;
+
+            float g = ( pixel.r * 0.2 + pixel.g * 0.7 + pixel.b * 0.1 );
+            //pixel.rgb = vec3( g, g, g );
+
+            //pixel.rgb = pixel.rgg;//vec3( 0, pixel.g, pixel.b );
+
+            float sat = 0.0;
+
+            float sr = ( 1.0 - sat ) * 0.2;
+            float sg = ( 1.0 - sat ) * 0.7;
+            float sb = ( 1.0 - sat ) * 0.1;
+
+            pixel.r = pixel.r * ( 0.2 + sat ) + pixel.g * 0.7 + pixel.b * 0.1;
+            pixel.g = pixel.r * 0.2 + pixel.g * ( 0.7 + sat ) + pixel.b * 0.1;
+            pixel.b = pixel.r * 0.2 + pixel.g * 0.7 + pixel.b * ( 0.1 + sat );
+
+            pixel = ( pixel - 0.5 ) * contrast + 0.5;
+            pixel += brightness;
+
+            gl_FragColor = vec4( pixel.rgb, 1.0 );
+        }
+
+    </script>
+    <script type="text/javascript">
+
+        var gl, program, indexBuffer, children = [], q;
+
+        function Bitmap(img) {
+
+            var w = img.width;
+            var h = img.height;
+            var size = 1;
+
+            var buffer = gl.createBuffer();
+            var vertexData = new Float32Array([
+                0, 0,  0, 0,
+                w, 0,  size, 0,
+                w, h,  size, size,
+                0, h,  0, size,
+            ]);
+
+            gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
+            gl.bufferData( gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW );
+
+            var tex = gl.createTexture();
+
+            gl.bindTexture( gl.TEXTURE_2D, tex );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR );
+            gl.texImage2D( gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img );
+
+
+            this.x = 0;
+            this.y = 0;
+            this.scaleX = 1;
+            this.scaleY = 1;
+            this.rotate = 0;
+            this.dataPerVertex = 4 * 4;
+            this.vertexOffset = 4 * 0;
+            this.uvOffset = 4 * 2;
+            this.brightness = 0;
+            this.contrast = 1;
+
+            this.width = img.width;
+            this.height = img.height;
+
+            this.render = function(){
+
+                gl.uniform2f( program.translate, this.x, this.y );
+                gl.uniform1f( program.rotate, this.rotate );
+                gl.uniform2f( program.scale, this.scaleX, this.scaleY );
+                gl.uniform1f( program.brightness, this.brightness );
+                gl.uniform1f( program.contrast, this.contrast );
+
+                gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
+                gl.vertexAttribPointer( program.vertex, 2, gl.FLOAT, false, this.dataPerVertex, this.vertexOffset );
+                gl.vertexAttribPointer( program.uv, 2, gl.FLOAT, false, this.dataPerVertex, this.uvOffset );
+
+                gl.bindTexture( gl.TEXTURE_2D, tex );
+
+                gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+                gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
+            }
+        }
+
+        function init() {
+            gl = document.getElementById("canvas").getContext("webgl");
+            console.dir( ">>", gl );
+
+            gl.clearColor( 0,0,0,1 );
+
+            var img = document.createElement( "img" );
+            img.src = "img/a.jpg";
+            img.onload = onComplete;
+        }
+
+        function onComplete(e) {
+
+            makeProgram();
+            makeBuffer();
+            addEvents();
+
+            q = new Bitmap(e.target);
+            children.push( q );
+
+            draw();
+        }
+
+        function addEvents() {
+
+            var px, py;
+
+            function mousemove( e ){
+
+                q.x += e.clientX - px;
+                q.y += e.clientY - py;
+
+                px = e.clientX;
+                py = e.clientY;
+            }
+
+            canvas.addEventListener( "mousedown", function(e){
+                document.body.addEventListener( "mousemove", mousemove );
+
+                px = e.clientX;
+                py = e.clientY;
+            });
+            document.body.addEventListener( "mouseup", function(e){
+                document.body.removeEventListener( "mousemove", mousemove );
+            });
+
+            var key = -1;
+
+            document.body.addEventListener( "keydown", function (e) {
+
+                console.log(e.keyCode);
+
+                switch(e.keyCode){
+                    case 37:
+                        q.rotate += 0.05;
+                        break;
+
+                    case 39:
+                        q.rotate -= 0.05;
+                        break;
+
+                    case 38:
+                        q.scaleX += 0.1;
+                        q.scaleY += 0.1;
+                        break;
+
+                    case 40:
+                        q.scaleX -= 0.1;
+                        q.scaleY -= 0.1;
+                        break;
+
+                    default:
+
+                            if( key == -1 )
+                                gl.canvas.addEventListener( "mousemove", onMove );
+
+                            key = e.keyCode;
+                        break;
+                }
+            });
+
+            document.body.addEventListener( "keyup", function (e) {
+                key = -1;
+                gl.canvas.removeEventListener( "mousemove", onMove );
+            })
+
+            function onMove(e) {
+
+                var value = (e.clientX - q.x) / q.width;
+
+                switch( key ){
+                    case 66:
+                        q.brightness = value * 2 - 1;
+                        break;
+
+                    case 67:
+                        q.contrast = value * 2 + 0.1;
+                        break;
+
+                    case 71:
+                        break;
+                }
+            }
+        }
+
+
+        function draw( ms ) {
+
+            requestAnimationFrame( draw );
+
+            gl.clear( gl.COLOR_BUFFER_BIT );
+
+            for (var i = 0; i < children.length; i++) {
+
+                children[i].render();
+            }
+        }
+
+
+        function makeProgram() {
+
+            program = gl.createProgram();
+
+            gl.attachShader( program, makeShader( gl.VERTEX_SHADER, getShaderSource("vsSrc") ) );
+            gl.attachShader( program, makeShader( gl.FRAGMENT_SHADER, getShaderSource("fsSrc") ) );
+            gl.linkProgram( program );
+
+            assert(
+                    gl.getProgramParameter( program, gl.LINK_STATUS ),
+                    gl.getProgramInfoLog( program )
+            );
+
+            gl.useProgram( program );
+
+            var labels = [ "translate", "scale", "rotate", "stage", "color", "brightness", "contrast" ];
+            var prop;
+
+            for (var i = 0; i < labels.length; i++) {
+                prop = labels[i];
+                program[ prop ] = gl.getUniformLocation( program, prop );
+            }
+
+            labels = [ "vertex", "uv" ];
+
+            for (var j = 0; j < labels.length; j++) {
+                prop = labels[j];
+                program[ prop ] = gl.getAttribLocation( program, prop );
+                gl.enableVertexAttribArray( program[prop] );
+            }
+
+            gl.uniform2f( program.stage, gl.canvas.width, gl.canvas.height );
+        }
+
+        function makeShader(type, src) {
+            var shader = gl.createShader( type, src );
+
+            gl.shaderSource( shader, src );
+            gl.compileShader( shader );
+
+            assert(
+                    gl.getShaderParameter( shader, gl.COMPILE_STATUS ),
+                    gl.getShaderInfoLog( shader )
+            );
+
+            return shader;
+        }
+
+        function makeBuffer() {
+
+            indexBuffer = gl.createBuffer();
+
+            var indexData = new Uint16Array([
+                0, 1, 2,
+                0, 2, 3
+            ]);
+
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW );
+        }
+
+
+        function assert(assertion, message) {
+            if( !assertion )
+                throw new Error( "Assertion Error:" + message );
+        }
+
+        function getShaderSource(id) {
+            return document.getElementById( id).innerHTML;
+        }
+
+        window.onload = init;
+
+    </script>
+</head>
+<body>
+<div class="wrapper">
+    <h3 class="title">template</h3>
+    <canvas id="canvas" width="800" height="600"></canvas>
+</div>
+</body>
+</html>

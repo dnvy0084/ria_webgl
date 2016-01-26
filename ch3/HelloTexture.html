@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style>
+        canvas{
+            border: 1px solid #999;
+        }
+    </style>
+    <script type="x" id="vssrc">
+
+        attribute vec2 vertex;
+
+        uniform vec2 scale;
+        uniform vec2 translate;
+        uniform float rotate;
+
+        uniform vec2 stage;
+
+        void main(){
+
+            vec2 p = vertex;
+
+            float cos = cos(rotate);
+            float sin = sin(rotate);
+
+            float x = cos * p.x - sin * p.y;
+            float y = sin * p.x + cos * p.y;
+
+            p = vec2( x, y );
+            p *= scale;
+            p += translate;
+
+            p = p / stage * 2.0 - 1.0;
+
+            gl_Position = vec4( p.x, -p.y, 0, 1 );
+        }
+
+    </script>
+
+    <script type="x" id="fssrc">
+
+        precision highp float;
+
+        uniform vec3 color;
+
+        void main(){
+            gl_FragColor = vec4( color,1 );
+        }
+    </script>
+    <script type="text/javascript">
+
+        var gl, program, indexBuffer, children = [];
+
+        function Quad(w, h, color) {
+
+            var buffer = gl.createBuffer();
+
+            var bufferData = new Float32Array([
+                    0, 0,
+                    w, 0,
+                    w, h,
+                    0, h
+            ]);
+
+            this.x = 0;
+            this.y = 0;
+            this.scaleX = 1.0;
+            this.scaleY = 1.0;
+            this.rotate = 0.0;
+
+            var r = (color >> 16 & 0xff) / 255;
+            var g = (color >> 8 & 0xff) / 255;
+            var b = ( color & 0xff ) / 255;
+
+            gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
+            gl.bufferData( gl.ARRAY_BUFFER, bufferData, gl.STATIC_DRAW );
+
+            this.render = function(){
+
+                gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
+
+                gl.uniform2f( program.translate, this.x, this.y );
+                gl.uniform2f( program.scale, this.scaleX, this.scaleY );
+                gl.uniform1f( program.rotate, this.rotate );
+
+                gl.uniform3f( program.color, r, g, b );
+
+                gl.vertexAttribPointer( program.vertex, 2, gl.FLOAT, false, 4 * 2, 0 );
+                gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+                gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
+            };
+        }
+
+        function init() {
+            gl = document.getElementById("canvas").getContext( "webgl" );
+            console.log( gl );
+
+            gl.clearColor( 0,0,0,1 );
+
+            makeProgram();
+            makeBuffer();
+
+            var q = new Quad( 200, 100, 0xff );
+            children.push( q );
+            q.x = 100;
+            q.y = 100;
+
+            var q2 = new Quad( 50, 50, 0xff00 );
+            children.push( q2 );
+
+            update();
+        }
+
+        function update( ms ) {
+            requestAnimationFrame( update );
+
+            gl.clear( gl.COLOR_BUFFER_BIT );
+
+            for (var i = 0; i < children.length; i++) {
+                children[i].render();
+            }
+        }
+
+        function makeProgram() {
+
+            program = gl.createProgram();
+
+            var vssrc = document.getElementById("vssrc").innerHTML;
+            var fssrc = document.getElementById("fssrc").innerHTML;
+
+            gl.attachShader( program, makeShader( gl.VERTEX_SHADER, vssrc ) );
+            gl.attachShader( program, makeShader( gl.FRAGMENT_SHADER, fssrc ) );
+            gl.linkProgram( program );
+
+            assert( gl.getProgramParameter(program, gl.LINK_STATUS ),
+                    gl.getProgramInfoLog( program )
+            );
+
+            gl.useProgram( program );
+
+            var labels = [ "translate", "scale", "rotate", "stage", "color" ];
+
+            for (var i = 0; i < labels.length; i++) {
+                var p = labels[i];
+
+                program[p] = gl.getUniformLocation( program, p );
+            }
+
+            labels = [ "vertex" ];
+
+            for (var j = 0; j < labels.length; j++) {
+                p = labels[j];
+
+                program[p] = gl.getAttribLocation( program, p );
+                gl.enableVertexAttribArray( program[p] );
+            }
+
+            gl.uniform2f( program.stage, gl.canvas.width, gl.canvas.height );
+        }
+
+        function makeShader(type, src) {
+
+            var shader = gl.createShader( type );
+
+            gl.shaderSource( shader, src );
+            gl.compileShader( shader );
+
+            assert( gl.getShaderParameter(shader, gl.COMPILE_STATUS),
+                    gl.getShaderInfoLog( shader )
+            );
+
+            return shader;
+        }
+
+        function makeBuffer() {
+
+            indexBuffer = gl.createBuffer();
+
+            var indexData = new Uint16Array([0,1,2, 0,2,3]);
+
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW );
+        }
+
+        function assert( assertion, message ) {
+            if( !assertion )
+                throw new Error( message );
+        }
+
+        window.onload = init;
+
+    </script>
+</head>
+<body>
+<div class="wrapper">
+    <h3 class="title">template</h3>
+    <canvas id="canvas" width="800" height="600"></canvas>
+</div>
+</body>
+</html>
