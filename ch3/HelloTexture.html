@@ -52,13 +52,26 @@
         uniform sampler2D tex;
         uniform float b;
 
+        uniform mat3 mat;
+
         varying vec2 frag_uv;
 
         void main(){
 
             vec3 pixel = texture2D( tex, frag_uv ).rgb;
 
-            pixel = pixel + b;
+            pixel = value + pixel;
+
+            float g = pixel.r * 0.2 + pixel.g * 0.7 + pixel.b * 0.1;
+            //pixel = vec3(g,g,g);
+
+            //pixel = ( pixel - 0.5 ) * ( b + 1.0 ) + 0.5;
+
+            //pixel = 1.0 - pixel;
+
+            //pixel = floor( vec3( g, g, g ) + 0.5 );
+
+            //pixel.r = pixel.r + 0.5;
 
             gl_FragColor = vec4( pixel, 1 );
         }
