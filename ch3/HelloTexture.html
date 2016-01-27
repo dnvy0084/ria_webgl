@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style>
+        canvas{
+            border: 1px solid #999;
+        }
+    </style>
+    <script type="x" id="vssrc">
+
+        attribute vec2 vertex;
+        attribute vec2 uv;
+
+        varying vec2 frag_uv;
+
+        uniform vec2 scale;
+        uniform vec2 translate;
+        uniform float rotate;
+
+        uniform vec2 stage;
+
+        void main(){
+
+            vec2 p = vertex;
+
+            frag_uv = uv;
+
+            float cos = cos(rotate);
+            float sin = sin(rotate);
+
+            float x = cos * p.x - sin * p.y;
+            float y = sin * p.x + cos * p.y;
+
+            p = vec2( x, y );
+            p *= scale;
+            p += translate;
+
+            p = p / stage * 2.0 - 1.0;
+
+            gl_Position = vec4( p.x, -p.y, 0, 1 );
+        }
+
+    </script>
+
+    <script type="x" id="fssrc">
+
+        precision highp float;
+
+        uniform vec3 color;
+        uniform sampler2D tex;
+        uniform float b;
+
+        uniform mat3 mat;
+
+        varying vec2 frag_uv;
+
+        void main(){
+
+            vec3 pixel = texture2D( tex, frag_uv ).rgb;
+
+            pixel = value + pixel;
+
+            float g = pixel.r * 0.2 + pixel.g * 0.7 + pixel.b * 0.1;
+            //pixel = vec3(g,g,g);
+
+            //pixel = ( pixel - 0.5 ) * ( b + 1.0 ) + 0.5;
+
+            //pixel = 1.0 - pixel;
+
+            //pixel = floor( vec3( g, g, g ) + 0.5 );
+
+            //pixel.r = pixel.r + 0.5;
+
+            gl_FragColor = vec4( pixel, 1 );
+        }
+    </script>
+    <script type="text/javascript">
+
+        var gl, program, indexBuffer, children = [];
+
+        function Bitmap(img) {
+
+            var buffer = gl.createBuffer();
+            var w = img.width;
+            var h = img.height;
+
+            var bufferData = new Float32Array([
+                    0, 0,   0, 0,
+                    w, 0,   1, 0,
+                    w, h,   1, 1,
+                    0, h,   0, 1
+            ]);
+
+            this.x = 0;
+            this.y = 0;
+            this.scaleX = 1.0;
+            this.scaleY = 1.0;
+            this.rotate = 0.0;
+            this.b = 0;
+
+            gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
+            gl.bufferData( gl.ARRAY_BUFFER, bufferData, gl.STATIC_DRAW );
+
+
+            var tex = gl.createTexture();
+
+            gl.bindTexture( gl.TEXTURE_2D, tex );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
+            gl.texImage2D( gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img );
+
+
+            this.render = function(){
+
+                gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
+
+                gl.uniform2f( program.translate, this.x, this.y );
+                gl.uniform2f( program.scale, this.scaleX, this.scaleY );
+                gl.uniform1f( program.rotate, this.rotate );
+                gl.uniform1f( program.b, this.b );
+
+                gl.bindTexture( gl.TEXTURE_2D, tex );
+
+                gl.vertexAttribPointer( program.vertex, 2, gl.FLOAT, false, 4 * 4, 0 );
+                gl.vertexAttribPointer( program.uv, 2, gl.FLOAT, false, 4 * 4, 4 * 2 );
+
+                gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+                gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
+            };
+        }
+
+        function init() {
+            gl = document.getElementById("canvas").getContext( "webgl" );
+            console.log( gl );
+
+            gl.clearColor( 0,0,0,1 );
+
+            var img = document.createElement( "img" );
+            img.src = "img/a.jpg";
+            img.onload = onLoad;
+        }
+
+        function onLoad(e) {
+            makeProgram();
+            makeBuffer();
+
+            var q = new Bitmap(e.target);
+            children.push(q);
+
+            update();
+        }
+
+        function update( ms ) {
+            requestAnimationFrame( update );
+
+            gl.clear( gl.COLOR_BUFFER_BIT );
+
+            for (var i = 0; i < children.length; i++) {
+                children[i].b = Math.cos(ms/1000);
+                children[i].render();
+            }
+        }
+
+        function makeProgram() {
+
+            program = gl.createProgram();
+
+            var vssrc = document.getElementById("vssrc").innerHTML;
+            var fssrc = document.getElementById("fssrc").innerHTML;
+
+            gl.attachShader( program, makeShader( gl.VERTEX_SHADER, vssrc ) );
+            gl.attachShader( program, makeShader( gl.FRAGMENT_SHADER, fssrc ) );
+            gl.linkProgram( program );
+
+            assert( gl.getProgramParameter(program, gl.LINK_STATUS ),
+                    gl.getProgramInfoLog( program )
+            );
+
+            gl.useProgram( program );
+
+            var labels = [ "translate", "scale", "rotate", "stage", "color", "b" ];
+
+            for (var i = 0; i < labels.length; i++) {
+                var p = labels[i];
+
+                program[p] = gl.getUniformLocation( program, p );
+            }
+
+            labels = [ "vertex", "uv" ];
+
+            for (var j = 0; j < labels.length; j++) {
+                p = labels[j];
+
+                program[p] = gl.getAttribLocation( program, p );
+                gl.enableVertexAttribArray( program[p] );
+            }
+
+            gl.uniform2f( program.stage, gl.canvas.width, gl.canvas.height );
+        }
+
+        function makeShader(type, src) {
+
+            var shader = gl.createShader( type );
+
+            gl.shaderSource( shader, src );
+            gl.compileShader( shader );
+
+            assert( gl.getShaderParameter(shader, gl.COMPILE_STATUS),
+                    gl.getShaderInfoLog( shader )
+            );
+
+            return shader;
+        }
+
+        function makeBuffer() {
+
+            indexBuffer = gl.createBuffer();
+
+            var indexData = new Uint16Array([0,1,2, 0,2,3]);
+
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW );
+        }
+
+        function assert( assertion, message ) {
+            if( !assertion )
+                throw new Error( message );
+        }
+
+        window.onload = init;
+
+    </script>
+</head>
+<body>
+<div class="wrapper">
+    <h3 class="title">template</h3>
+    <canvas id="canvas" width="800" height="600"></canvas>
+</div>
+</body>
+</html>
