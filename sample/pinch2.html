@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <style>
+        canvas{
+            border: 1px solid #ccc;
+            background-color: #cc0000;
+        }
+        body{
+            background-color: #999999;
+        }
+    </style>
+    <script type="x-shader" id="vsSrc">
+
+        attribute vec2 vertex;
+        attribute vec2 uv;
+
+        uniform mat3 mat;
+        uniform vec2 stage;
+
+        varying vec2 f_uv;
+
+        void main(){
+
+            f_uv = uv;
+            vec3 p = mat * vec3( vertex, 1.0 );
+
+            p = vec3( ( p.xy / stage * 2.0 - 1.0 ), 1.0 );
+
+            gl_Position = vec4( p.x, -p.y, 0, 1 );
+        }
+    </script>
+    <script type="x-shader" id="fsSrc">
+
+        precision highp float;
+
+        varying vec2 f_uv;
+
+        uniform sampler2D tex;
+
+        void main(){
+
+            gl_FragColor = texture2D( tex, f_uv );
+        }
+    </script>
+    <script type="text/javascript">
+
+        var gl, indexBuffer;
+
+        function assert(assertion, message) {
+            if( !assertion )
+                throw new Error( "Assertion Error> " + message );
+        }
+
+        function getShaderSource( id ) {
+            return document.getElementById( id ).innerHTML;
+        }
+
+        function invert( out, a ) {
+
+            var a00 = a[0], a01 = a[1], a02 = a[2],
+                a10 = a[3], a11 = a[4], a12 = a[5],
+                a20 = a[6], a21 = a[7], a22 = a[8],
+
+                b01 = a22 * a11 - a12 * a21,
+                b11 = -a22 * a10 + a12 * a20,
+                b21 = a21 * a10 - a11 * a20,
+
+            // Calculate the determinant
+            det = a00 * b01 + a01 * b11 + a02 * b21;
+
+            if (!det) {
+                return null;
+            }
+            det = 1.0 / det;
+
+            out[0] = b01 * det;
+            out[1] = (-a22 * a01 + a02 * a21) * det;
+            out[2] = (a12 * a01 - a02 * a11) * det;
+            out[3] = b11 * det;
+            out[4] = (a22 * a00 - a02 * a20) * det;
+            out[5] = (-a12 * a00 + a02 * a10) * det;
+            out[6] = b21 * det;
+            out[7] = (-a21 * a00 + a01 * a20) * det;
+            out[8] = (a11 * a00 - a01 * a10) * det;
+            return out;
+        }
+
+
+
+
+        function Bitmap(img) {
+
+            this.img = img;
+            this.x = 0;
+            this.y = 0;
+            this.scaleX = 1;
+            this.scaleY = 1;
+            this.offsetX = 0;
+            this.offsetY = 0;
+            this.rotate = 0;
+            this.width = img.width;
+            this.height = img.height;
+
+            this.mat = new Float32Array(9);
+
+            this.makeBuffer( img.width, img.height );
+            this.makeTexture( img );
+        }
+
+        Bitmap.prototype = {
+            constructor: Bitmap,
+
+            makeBuffer: function(w, h){
+
+                this.buffer = gl.createBuffer();
+                this.data = new Float32Array([
+                    0, 0,   0, 0,
+                    w, 0,   1, 0,
+                    w, h,   1, 1,
+                    0, h,   0, 1
+                ]);
+
+                gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer );
+                gl.bufferData( gl.ARRAY_BUFFER, this.data, gl.STATIC_DRAW );
+            },
+
+            makeTexture: function (img) {
+
+                this.texture = gl.createTexture();
+
+                gl.bindTexture( gl.TEXTURE_2D, this.texture );
+                    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
+                    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
+                    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+                    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR );
+                gl.texImage2D( gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img );
+            },
+
+            render: function ( renderer ) {
+
+                var p = renderer.program;
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+                gl.vertexAttribPointer( renderer.vertex, 2, gl.FLOAT, false, 4 * 4, 0 );
+                gl.vertexAttribPointer( renderer.uv, 2, gl.FLOAT, false, 4 * 4, 4 * 2 );
+
+                var a, b, c, d, tx, ty;
+
+                if( this.rotate == 0 )
+                {
+                    a = this.scaleX;
+                    c = 0;
+                    b = 0;
+                    d = this.scaleY;
+                    tx = this.x - this.offsetX * this.scaleX;
+                    ty = this.y - this.offsetY * this.scaleY;
+                }
+                else
+                {
+                    var cos = Math.cos( this.rotate );
+                    var sin = Math.sin( this.rotate );
+
+                    var cosx = cos * this.scaleX;
+                    var sinx = sin * this.scaleX;
+                    var cosy = cos * this.scaleY;
+                    var siny = sin * this.scaleY;
+
+                    a = cosx;
+                    c = -sinx
+                    tx = this.x - cosx * this.offsetX + sinx * this.offsetY;
+
+                    b = siny;
+                    d = cosy;
+                    ty = this.y - siny * this.offsetX - cosy * this.offsetY;
+                }
+
+                var m = this.mat;
+
+                m[0] = a;
+                m[1] = b;
+                m[2] = 0;
+                m[3] = c;
+                m[4] = d;
+                m[5] = 0;
+                m[6] = tx;
+                m[7] = ty;
+                m[8] = 1;
+
+                gl.uniformMatrix3fv( renderer.mat, false, this.mat );
+
+                gl.bindTexture( gl.TEXTURE_2D, this.texture );
+                gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
+            },
+        }
+
+
+
+
+
+        function Renderer( vsSrc, fsSrc ) {
+
+            this.linkShaders( vsSrc, fsSrc );
+        }
+
+        Renderer.prototype = {
+            constructor: Renderer,
+
+            linkShaders: function (vsSrc, fsSrc) {
+
+                this.program = gl.createProgram();
+
+                gl.attachShader( this.program, this.makeShader( gl.VERTEX_SHADER, vsSrc ) );
+                gl.attachShader( this.program, this.makeShader( gl.FRAGMENT_SHADER, fsSrc ) );
+                gl.linkProgram( this.program );
+
+                assert( gl.getProgramParameter( this.program, gl.LINK_STATUS),
+                        gl.getProgramInfoLog( this.program ) );
+
+                gl.useProgram( this.program );
+
+                this.initAttributes();
+                this.initUniforms();
+
+                gl.uniform2f( this.stage, gl.canvas.width, gl.canvas.height );
+            },
+
+            initAttributes: function () {
+
+                var labels = [ "vertex", "uv" ];
+
+                for (var i = 0; i < labels.length; i++) {
+
+                    var p = labels[i];
+
+                    this[p] = gl.getAttribLocation( this.program, p );
+                    gl.enableVertexAttribArray( this[p] );
+                }
+            },
+
+            initUniforms: function () {
+
+                var labels = [ "mat", "stage" ];
+
+                for (var i = 0; i < labels.length; i++) {
+                    var p = labels[i];
+                    this[p] = gl.getUniformLocation( this.program, p );
+                }
+
+                gl.uniform2f( this.stage, gl.canvas.width, gl.canvas.height );
+            },
+            
+            makeShader: function (type, src) {
+
+                var shader = gl.createShader( type );
+
+                gl.shaderSource( shader, src );
+                gl.compileShader( shader );
+
+                assert( gl.getShaderParameter( shader, gl.COMPILE_STATUS),
+                        gl.getShaderInfoLog( shader ) );
+
+                return shader;
+            },
+        }
+
+
+
+
+        var renderer, children = [], bitmap, circle, ctrlKey = false, ox, oy;
+
+        function init() {
+
+            gl = document.getElementById("canvas").getContext( "webgl",
+                    { alpha: false } );
+            console.log( gl );
+
+            gl.clearColor(0,0,0,1);
+
+            var r = gl.canvas.getBoundingClientRect();
+
+            ox = r.left;
+            oy = r.top;
+
+            renderer = new Renderer(
+                    getShaderSource( "vsSrc" ),
+                    getShaderSource( "fsSrc" )
+            );
+
+            initGL();
+
+            bitmap = new Bitmap(document.getElementById("imgA"));
+
+            bitmap.offsetX = bitmap.width / 2;
+            bitmap.offsetY = bitmap.height / 2;
+
+            bitmap.x = gl.canvas.width / 2;
+            bitmap.y = gl.canvas.height / 2;
+            bitmap.name = "bitmap";
+
+
+
+            circle = new Bitmap( document.getElementById("circle") );
+
+            circle.offsetX = circle.width / 2;
+            circle.offsetY = circle.height / 2;
+            circle.x = circle.y = 10000;
+            circle.name = "circle";
+
+            children.push( bitmap, circle );
+
+            initEvents();
+            render( 0 );
+        }
+
+        function initEvents() {
+            gl.canvas.addEventListener( "mousedown", onDown );
+            document.body.addEventListener( "mouseup", onUp );
+
+            document.body.addEventListener( "keydown", keyListener );
+            document.body.addEventListener( "keyup", keyListener );
+        }
+
+        var px, py, len;
+
+        function onDown(e) {
+
+            px = e.clientX;
+            py = e.clientY;
+
+            var stageX = px - ox;
+            var stageY = py - oy;
+
+            var localX = ( stageX + bitmap.offsetX * bitmap.scaleX - bitmap.x ) / bitmap.scaleX;
+            var localY = ( stageY + bitmap.offsetY * bitmap.scaleY - bitmap.y ) / bitmap.scaleY;
+
+            if (localX < 0 || localX > bitmap.width || localY < 0 || localY > bitmap.height) return;
+
+            var dx = bitmap.offsetX - localX;
+            var dy = bitmap.offsetY - localY;
+
+            bitmap.offsetX = localX;
+            bitmap.offsetY = localY;
+
+            bitmap.x -= dx * bitmap.scaleX;
+            bitmap.y -= dy * bitmap.scaleY;
+
+            if( ctrlKey )
+            {
+                circle.x = stageX;
+                circle.y = stageY;
+                len = 100;
+            }
+
+            document.body.addEventListener("mousemove", onMove);
+            document.body.style.cursor = "move";
+        }
+
+        function onMove(e) {
+
+            var dx = e.clientX - px;
+            var dy = e.clientY - py;
+
+            if( ctrlKey )
+            {
+                circle.x -= dx;
+                circle.y -= dy;
+
+                var x = e.clientX - circle.x;
+                var y = e.clientY - circle.y;
+                var dl = x * x + y * y;
+                var t = Math.atan2( y, x );
+
+                bitmap.scaleX = bitmap.scaleY += ( dl - len ) / 50000;
+                bitmap.rotate = t;
+
+                len = dl;
+            }
+            else
+            {
+                bitmap.x += dx;
+                bitmap.y += dy;
+            }
+
+            px = e.clientX;
+            py = e.clientY;
+        }
+
+        function onUp(e) {
+            document.body.removeEventListener( "mousemove", onMove );
+
+            circle.x = circle.y = 10000;
+            document.body.style.cursor = "default";
+        }
+
+
+        function keyListener(e) {
+            ctrlKey = e.ctrlKey;
+        };
+
+
+        function render(ms) {
+            requestAnimationFrame( render );
+
+            gl.clear( gl.COLOR_BUFFER_BIT );
+
+            for (var i = 0; i < children.length; i++) {
+
+                children[i].render( renderer );
+            }
+        }
+
+        function initGL() {
+
+            indexBuffer = gl.createBuffer();
+
+            gl.enable( gl.BLEND );
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0,1,2, 0,2,3]), gl.STATIC_DRAW );
+
+            gl.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
+//            gl.blendFunc( gl.ONE, gl.ONE_MINUS_SRC_ALPHA );
+        }
+
+        window.onload = init;
+
+    </script>
+</head>
+<body>
+<div class="wrapper">
+    <h3 class="title">template</h3>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <img src="img/a.jpg" alt="" id="imgA"/>
+    <img src="img/circle.png" alt="" id="circle"/>
+</div>
+</body>
+</html>
