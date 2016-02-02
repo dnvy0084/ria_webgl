@@ -50,7 +50,10 @@
 
         uniform vec3 color;
         uniform sampler2D tex;
+
         uniform float b;
+        uniform float c;
+        uniform float g;
 
         uniform mat3 mat;
 
@@ -60,18 +63,12 @@
 
             vec3 pixel = texture2D( tex, frag_uv ).rgb;
 
-            pixel = value + pixel;
+            float grayValue = pixel.r * 0.2 + pixel.g * 0.7 + pixel.b * 0.1;
 
-            float g = pixel.r * 0.2 + pixel.g * 0.7 + pixel.b * 0.1;
-            //pixel = vec3(g,g,g);
+            pixel = pixel + g * ( vec3(grayValue, grayValue, grayValue) - pixel );
 
-            //pixel = ( pixel - 0.5 ) * ( b + 1.0 ) + 0.5;
-
-            //pixel = 1.0 - pixel;
-
-            //pixel = floor( vec3( g, g, g ) + 0.5 );
-
-            //pixel.r = pixel.r + 0.5;
+            pixel = c * ( pixel - 0.5 ) + 0.5;
+            pixel += b;
 
             gl_FragColor = vec4( pixel, 1 );
         }
@@ -99,6 +96,8 @@
             this.scaleY = 1.0;
             this.rotate = 0.0;
             this.b = 0;
+            this.g = 0;
+            this.c = 1;
 
             gl.bindBuffer( gl.ARRAY_BUFFER, buffer );
             gl.bufferData( gl.ARRAY_BUFFER, bufferData, gl.STATIC_DRAW );
@@ -122,6 +121,8 @@
                 gl.uniform2f( program.scale, this.scaleX, this.scaleY );
                 gl.uniform1f( program.rotate, this.rotate );
                 gl.uniform1f( program.b, this.b );
+                gl.uniform1f( program.c, this.c );
+                gl.uniform1f( program.g, this.g );
 
                 gl.bindTexture( gl.TEXTURE_2D, tex );
 
@@ -148,8 +149,29 @@
             makeProgram();
             makeBuffer();
 
-            var q = new Bitmap(e.target);
-            children.push(q);
+            var original = new Bitmap(e.target);
+            var b = new Bitmap(e.target);
+            var c = new Bitmap(e.target);
+            var g = new Bitmap(e.target);
+
+            var a = [
+                original, 0, 0, 1,
+                b, 0.5, 0, 1,
+                c, 0, 1, 1,
+                g, 0, 0, 2
+            ];
+
+            var bitmap;
+
+            for (var i = 0; i < a.length; i += 4 ) {
+                bitmap = a[i];
+                bitmap.b = a[i+1];
+                bitmap.g = a[i+2];
+                bitmap.c = a[i+3];
+                bitmap.x = 0;
+                bitmap.y = e.target.height * ( i / 4 );
+                children.push( bitmap );
+            }
 
             update();
         }
@@ -160,7 +182,7 @@
             gl.clear( gl.COLOR_BUFFER_BIT );
 
             for (var i = 0; i < children.length; i++) {
-                children[i].b = Math.cos(ms/1000);
+                //children[i].b = Math.cos(ms/1000);
                 children[i].render();
             }
         }
@@ -182,7 +204,7 @@
 
             gl.useProgram( program );
 
-            var labels = [ "translate", "scale", "rotate", "stage", "color", "b" ];
+            var labels = [ "translate", "scale", "rotate", "stage", "color", "b", "c", "g" ];
 
             for (var i = 0; i < labels.length; i++) {
                 var p = labels[i];
@@ -227,8 +249,9 @@
         }
 
         function assert( assertion, message ) {
+
             if( !assertion )
-                throw new Error( message );
+                throw new Error( "Assertion Error>" + message );
         }
 
         window.onload = init;
@@ -238,7 +261,7 @@
 <body>
 <div class="wrapper">
     <h3 class="title">template</h3>
-    <canvas id="canvas" width="800" height="600"></canvas>
+    <canvas id="canvas" width="800" height="800"></canvas>
 </div>
 </body>
 </html>
