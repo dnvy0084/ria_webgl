@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>pinch sample</title>
+    <title>Instantiation</title>
     <style>
         #canvas{
             border: 1px solid #ccc;
@@ -121,7 +121,7 @@
 
             DisplayObject.call( this );
 
-            this.makeBuffer( img.w, img.h );
+            this.makeBuffer( img.width, img.height );
             this.makeTexture( img );
         }
 
@@ -192,7 +192,7 @@
             makeProgram(); /* 프로그램 생성 : 셰이더 attach 및 link */
             makeIndexBuffer();
 
-            makeBitmaps( 10 );
+            makeBitmaps( 20 );
 
             render(); /* 실제 draw */
         }
@@ -219,7 +219,7 @@
                 bitmap.offsetX = bitmap.width / 2;
                 bitmap.offsetY = bitmap.height / 2;
 
-                bitmap.scaleX = bitmap.scaleY = 0.5 + Math.random();
+                bitmap.scaleX = bitmap.scaleY = 0.5 + Math.random() / 2;
 
                 bitmap.x = gl.canvas.width * Math.random();
                 bitmap.y = gl.canvas.height * Math.random();

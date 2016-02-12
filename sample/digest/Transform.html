@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>pinch sample</title>
+    <title>Transform</title>
     <style>
         #canvas{
             border: 1px solid #ccc;
@@ -199,10 +199,10 @@
             var x = 0, y = 0;
 
             var bufferData = new Float32Array([
-                    x, y,           0, 0,/*1, 0, 0,*/
-                    x + w, y,       1, 0,/*0, 1, 0,*/
-                    x + w, y + h,   1, 1,/*0, 0, 1,*/
-                    x, y + h,       0, 1,/*1, 0, 1*/
+                    x, y,           0, 0, /*1, 0, 0,*/
+                    x + w, y,       1, 0, /*0, 1, 0,*/
+                    x + w, y + h,   1, 1, /*0, 0, 1,*/
+                    x, y + h,       0, 1, /*1, 0, 1*/
             ]);
 
             gl.bindBuffer( gl.ARRAY_BUFFER, vertexBuffer );
