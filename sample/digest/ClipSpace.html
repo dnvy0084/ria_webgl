@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>pinch sample</title>
+    <style>
+        #canvas{
+            border: 1px solid #ccc;
+        }
+    </style>
+
+    <script type="x-shader" id="vs">
+
+        attribute vec2 vertex;
+        attribute vec3 color;
+
+        varying vec3 vColor;
+
+        uniform vec2 stage;
+
+        void main(){
+
+            vColor = color;
+
+            vec2 p = vertex / stage * 2.0 - 1.0;
+
+            gl_Position = vec4( p.x, -p.y, 0, 1 );
+        }
+
+    </script>
+    <script type="x-shader" id="fs">
+
+        precision highp float;
+
+        varying vec3 vColor;
+
+        void main(){
+
+            gl_FragColor = vec4( vColor, 1 );
+        }
+
+    </script>
+
+</head>
+<body>
+<div class="wrapper">
+    <canvas id="canvas" width="400" height="300"></canvas>
+
+    <script type="text/javascript">
+
+        var gl, /* webgl rendering context */
+            program, /* program instance */
+            vertexBuffer, /* vertexBuffer */
+            indexBuffer; /* index buffer */
+
+        function init() {
+
+            /* webgl rendering context 객체를 가져옴*/
+            gl = document.getElementById( "canvas" ).getContext( "webgl" );
+            console.log( gl );
+
+            initGL();
+        }
+
+        function initGL() {
+
+            gl.clearColor( 0, 0, 0, 1 ); /* 배경색 지정 */
+
+            makeProgram(); /* 프로그램 생성 : 셰이더 attach 및 link */
+            makeBuffer(); /* vertexBuffer 생성 : 정점 데이터 포함*/
+
+            render(); /* 실제 draw */
+        }
+
+        function render() {
+
+            gl.clear( gl.COLOR_BUFFER_BIT );
+
+            gl.bindBuffer( gl.ARRAY_BUFFER, vertexBuffer );
+
+            var vertex = gl.getAttribLocation( program, "vertex" );
+            gl.enableVertexAttribArray( vertex );
+
+            var color = gl.getAttribLocation( program, "color" );
+            gl.enableVertexAttribArray( color );
+
+            gl.vertexAttribPointer( vertex, 2, gl.FLOAT, false, 4 * 5, 4 * 0 );
+            gl.vertexAttribPointer( color, 3, gl.FLOAT, false, 4 * 5, 4 * 2 );
+
+            var stage = gl.getUniformLocation( program, "stage" );
+            gl.uniform2f( stage, gl.canvas.width, gl.canvas.height );
+
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
+        }
+
+        function makeProgram() {
+
+            program = gl.createProgram();
+
+            var vsShader = gl.createShader( gl.VERTEX_SHADER );
+            var fsShader = gl.createShader( gl.FRAGMENT_SHADER );
+
+            var vertexShaderSource = document.getElementById("vs").innerHTML;
+            var fragmentShaderSource = document.getElementById("fs").innerHTML;
+
+            gl.shaderSource( vsShader, vertexShaderSource );
+            gl.shaderSource( fsShader, fragmentShaderSource );
+
+            gl.compileShader( vsShader );
+
+            if( !gl.getShaderParameter( vsShader, gl.COMPILE_STATUS ) )
+                throw new Error( "VERTEX_SHADER COMPILE ERROR:" + gl.getShaderInfoLog( vsShader ) );
+
+            gl.compileShader( fsShader );
+
+            if( !gl.getShaderParameter( fsShader, gl.COMPILE_STATUS ) )
+                throw new Error( "FRAGMENT_SHADER COMPILE ERROR:" + gl.getShaderInfoLog( fsShader ) );
+
+
+            gl.attachShader( program, vsShader );
+            gl.attachShader( program, fsShader );
+
+            gl.linkProgram( program );
+
+            if( !gl.getProgramParameter( program, gl.LINK_STATUS ) )
+                throw new Error( "LINK ERROR : " + gl.getProgramInfoLog( program ) );
+
+            gl.useProgram( program );
+        }
+
+        function makeBuffer(){
+
+            vertexBuffer = gl.createBuffer();
+
+            var x = 100, y = 100, w = 150, h = 100;
+
+            var bufferData = new Float32Array([
+                    x, y,           1, 0, 0,
+                    x + w, y,       0, 1, 0,
+                    x + w, y + h,   0, 0, 1,
+                    x, y + h,       1, 0, 1
+            ]);
+
+            gl.bindBuffer( gl.ARRAY_BUFFER, vertexBuffer );
+            gl.bufferData( gl.ARRAY_BUFFER, bufferData, gl.STATIC_DRAW );
+            gl.bindBuffer( gl.ARRAY_BUFFER, null );
+
+            indexBuffer = gl.createBuffer();
+
+            var indexBufferData = new Uint16Array([
+                    0, 1, 2,    0, 2, 3
+            ]);
+
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, indexBufferData, gl.STATIC_DRAW );
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, null );
+        }
+
+        window.onload = init;
+
+    </script>
+</div>
+</body>
+</html>
