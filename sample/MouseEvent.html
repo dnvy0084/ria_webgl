@@ -88,7 +88,11 @@
             },
 
             append: function( b ){
-                //
+                //return b * this;
+            },
+
+            preppend: function( b ){
+                //return this * b;
             },
 
             transform: function ( v, out ) {
@@ -101,7 +105,7 @@
 
                 var a = m[0], b = m[3], c = m[6],
                     d = m[1], e = m[4], f = m[7];
-
+                        //0           0          1
                 out.x = a * x + b * y + c;
                 out.y = d * x + e * y + f;
 
@@ -464,7 +468,7 @@
             $p.x = stageX;
             $p.y = stageY;
 
-            for (var i = 0; i < children.length; i++) {
+            for (var i = 0; i < children.length; ++i) {
 
                 var child = children[i];
 

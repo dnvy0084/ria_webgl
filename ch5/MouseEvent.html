@@ -192,7 +192,13 @@
 
                             if( this.rotate == 0 )
                             {
+                                a = sx;
+                                b = 0;
+                                c = -sx * ox + this.x;
 
+                                d = 0;
+                                e = sy;
+                                f = -sy * oy + this.y;
                             }
                             else
                             {
@@ -376,8 +382,43 @@
             makeIndexBuffer();
 
             makeBitmaps( 1 );
+            initEvents();
 
             render(); /* 실제 draw */
+        }
+
+        function initEvents() {
+            var canvas = gl.canvas;
+
+            var r = canvas.getBoundingClientRect();
+
+            ox = r.left;
+            oy = r.top;
+
+            canvas.addEventListener( "mousemove", onMove );
+        }
+
+        var ox, oy;
+
+        function onMove(e) {
+
+            var stageX = e.clientX - ox;
+            var stageY = e.clientY - oy;
+
+            for (var i = 0; i < children.length; i++) {
+                var child = children[i];
+
+                var localX = ( stageX + child.offsetX * child.scaleX - child.x ) / child.scaleX;
+                var localY = ( stageY + child.offsetY * child.scaleY - child.y ) / child.scaleY;
+
+                if( localX < 0 || localY < 0 || localX > child.width || localY > child.height )
+                {
+                    child.grayscale = 0;
+                    continue;
+                }
+
+                child.grayscale = 1;
+            }
         }
 
         function render( ms ) {
@@ -407,23 +448,27 @@
 
                 bitmap.offsetX = bitmap.width / 2;
                 bitmap.offsetY = bitmap.height / 2;
-
+//
                 bitmap.x = gl.canvas.width / 2;
                 bitmap.y = gl.canvas.height / 2;
 
-                bitmap.brightness[0] = 0.0;
-                bitmap.brightness[1] = 0.0;
-                bitmap.brightness[2] = 0.0;
+                bitmap.scaleX = bitmap.scaleY = 0.5;
 
-                bitmap.contrast[0] = 1;
-                bitmap.contrast[1] = 1;
-                bitmap.contrast[2] = 1;
-
-                bitmap.grayscale = 1;
-                bitmap.invert = 0.7;
+                bitmap.rotate = Math.PI / 4;
+//
+//                bitmap.brightness[0] = 0.0;
+//                bitmap.brightness[1] = 0.0;
+//                bitmap.brightness[2] = 0.0;
+//
+//                bitmap.contrast[0] = 1;
+//                bitmap.contrast[1] = 1;
+//                bitmap.contrast[2] = 1;
+//
+//                bitmap.grayscale = 1;
+//                bitmap.invert = 0.7;
 
                 bitmap.enterframe = function( self, ms ){
-                    self.grayscale = ( Math.cos( ms / 500 ) + 1 ) / 2;
+                    //self.grayscale = ( Math.cos( ms / 500 ) + 1 ) / 2;
                 };
 
                 children.push( bitmap );
