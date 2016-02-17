@@ -2,39 +2,54 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Instantiation</title>
+    <title>Transform2</title>
     <link rel="stylesheet" type="text/css" href="css/common.css">
 
     <script type="x-shader" id="vs">
+
+        // P` = R( P - O ) x S + T;
+        // P : vertex
+        // O : offset
+        // S : scale
+        // T : translate
+        // R : rotate function
+
+        // x`= { cos( P.x - O.x ) - sin( P.y - O.y ) } x S.x + T.x;
+        // x`= cos * P.x * S.x - cos * O.x * S.x - sin * P.y * S.x + sin * O.y * S.x + T.x;
+        // a = cos * S.x;
+        // b = -sin * S.x;
+        // c = T.x - a * O.x - b * O.y;
+        // x`= a * P.x + b * P.y + c;
+
+        // y`= { sin( P.x - O.x ) + cos( P.y - O.y ) } x S.y + T.y;
+        // y`= sin * P.x * S.y - sin * O.x * S.y + cos * P.y * S.y - cos * O.y * S.y + T.y;
+        // d = sin * S.y;
+        // e = cos * S.y;
+        // f = T.y - d * O.x - e * O.y;
+        // y`= d * P.x + e * P.y + f;
 
         attribute vec2 vertex;
         attribute vec2 uv;
 
         varying vec2 vUv;
 
-        uniform vec2 stage;
-        uniform vec2 translate;
-        uniform vec2 scale;
-        uniform vec2 offset;
+        uniform float a;
+        uniform float b;
+        uniform float c;
+        uniform float d;
+        uniform float e;
+        uniform float f;
 
-        uniform float rotate;
+        uniform vec2 stage;
 
         void main(){
 
             vUv = uv;
 
-            vec2 p = vertex - offset;
-
-            float cos = cos( rotate );
-            float sin = sin( rotate );
-
-            float x = cos * p.x - sin * p.y;
-            float y = sin * p.x + cos * p.y;
-
-            p = vec2( x, y );
-
-            p *= scale;
-            p += translate;
+            vec2 p = vec2(
+                a * vertex.x + b * vertex.y + c,
+                d * vertex.x + e * vertex.y + f
+            );
 
             p = p / stage * 2.0 - 1.0;
 
@@ -124,10 +139,44 @@
             gl.bindTexture( gl.TEXTURE_2D, this.texture );
             gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer );
 
-            gl.uniform2f( program.translate, this.x, this.y );
-            gl.uniform2f( program.offset, this.offsetX, this.offsetY );
-            gl.uniform2f( program.scale, this.scaleX, this.scaleY );
-            gl.uniform1f( program.rotate, this.rotate );
+            // P` = R( P - O ) x S + T;
+            // P : vertex
+            // O : offset
+            // S : scale
+            // T : translate
+            // R : rotate function
+
+            // x`= { cos( P.x - O.x ) - sin( P.y - O.y ) } x S.x + T.x;
+            // x`= cos * P.x * S.x - cos * O.x * S.x - sin * P.y * S.x + sin * O.y * S.x + T.x;
+            // a = cos * S.x;
+            // b = -sin * S.x;
+            // c = T.x - a * O.x - b * O.y;
+            // x`= a * P.x + b * P.y + c;
+
+            // y`= { sin( P.x - O.x ) + cos( P.y - O.y ) } x S.y + T.y;
+            // y`= sin * P.x * S.y - sin * O.x * S.y + cos * P.y * S.y - cos * O.y * S.y + T.y;
+            // d = sin * S.y;
+            // e = cos * S.y;
+            // f = T.y - d * O.x - e * O.y;
+            // y`= d * P.x + e * P.y + f;
+
+            var cos = Math.cos( this.rotate );
+            var sin = Math.sin( this.rotate );
+
+            var a = cos * this.scaleX;
+            var b = -sin * this.scaleX;
+            var c = this.x - a * this.offsetX - b * this.offsetY;
+
+            var d = sin * this.scaleY;
+            var e = cos * this.scaleY;
+            var f = this.y - d * this.offsetX - e * this.offsetY;
+
+            gl.uniform1f( program.a, a );
+            gl.uniform1f( program.b, b );
+            gl.uniform1f( program.c, c );
+            gl.uniform1f( program.d, d );
+            gl.uniform1f( program.e, e );
+            gl.uniform1f( program.f, f );
 
             gl.vertexAttribPointer( program.vertex, 2, gl.FLOAT, false, 4 * 4, 0 );
             gl.vertexAttribPointer( program.uv, 2, gl.FLOAT, false, 4 * 4, 4 * 2 );
@@ -187,8 +236,6 @@
             }
 
             onImageComplete( {target: img} );
-
-
         }
 
         function onImageComplete(e) {
@@ -198,7 +245,7 @@
             makeProgram(); /* 프로그램 생성 : 셰이더 attach 및 link */
             makeIndexBuffer();
 
-            makeBitmaps( 20 );
+            makeBitmaps( 40 );
 
             render(); /* 실제 draw */
         }
@@ -231,15 +278,15 @@
                 bitmap.offsetX = bitmap.width / 2;
                 bitmap.offsetY = bitmap.height / 2;
 
-                bitmap.scaleX = bitmap.scaleY = 0.5 + Math.random() / 2;
+                bitmap.scaleX = bitmap.scaleY = 0.2 + Math.random() / 2;
 
                 bitmap.x = gl.canvas.width * Math.random();
                 bitmap.y = gl.canvas.height * Math.random();
 
                 bitmap.rotate = 2 * Math.PI * Math.random();
 
-                bitmap.enterframe = function (self) {
-                    //self.rotate += 0.05;
+                bitmap.enterframe = function( self ){
+                    self.rotate += 0.05;
                 }
 
                 children.push( bitmap );
@@ -299,7 +346,7 @@
 
         function initUniforms() {
 
-            var labels = [ "translate", "scale", "offset", "rotate", "stage" ];
+            var labels = [ "a", "b", "c", "d", "e", "f", "stage" ];
 
             for (var i = 0; i < labels.length; i++) {
 

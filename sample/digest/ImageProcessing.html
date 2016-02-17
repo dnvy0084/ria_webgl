@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Instantiation</title>
+    <title>Image Processing</title>
     <link rel="stylesheet" type="text/css" href="css/common.css">
 
     <script type="x-shader" id="vs">
@@ -12,29 +12,15 @@
 
         varying vec2 vUv;
 
-        uniform vec2 stage;
-        uniform vec2 translate;
-        uniform vec2 scale;
-        uniform vec2 offset;
+        uniform mat3 mat;
 
-        uniform float rotate;
+        uniform vec2 stage;
 
         void main(){
 
             vUv = uv;
 
-            vec2 p = vertex - offset;
-
-            float cos = cos( rotate );
-            float sin = sin( rotate );
-
-            float x = cos * p.x - sin * p.y;
-            float y = sin * p.x + cos * p.y;
-
-            p = vec2( x, y );
-
-            p *= scale;
-            p += translate;
+            vec2 p = ( mat * vec3( vertex, 1 ) ).xy;
 
             p = p / stage * 2.0 - 1.0;
 
@@ -50,9 +36,25 @@
 
         uniform sampler2D tex;
 
+
+        uniform vec3 brightness;
+        uniform vec3 contrast;
+        uniform float grayscale;
+        uniform float invert;
+
         void main(){
 
-            gl_FragColor = texture2D( tex, vUv );
+            vec3 pixel = texture2D( tex, vUv ).rgb;
+
+            pixel += brightness;
+            pixel = ( pixel - 0.5 ) * contrast + 0.5;
+
+            float g = pixel.r * 0.2 + pixel.g * 0.7 + pixel.b * 0.1;
+
+            pixel = pixel + grayscale * ( vec3(g,g,g) - pixel );
+            pixel = pixel + invert * ( 1.0 - 2.0 * pixel );
+
+            gl_FragColor = vec4( pixel, 1 );
         }
 
     </script>
@@ -78,6 +80,76 @@
 
             this.width = 0;
             this.height = 0;
+
+            this.mat = new Float32Array(9);
+
+            var m = this.mat;
+
+            m[0] = 1, m[3] = 0, m[6] = 0,
+            m[1] = 0, m[4] = 1, m[7] = 0,
+            m[2] = 0, m[5] = 0, m[8] = 1;
+
+
+            this._colorMatrix = new Float32Array(16);
+
+            m = this._colorMatrix;
+
+            m[0] = 1, m[4] = 0, m[8 ] = 0, m[12] = 0,
+            m[1] = 0, m[5] = 1, m[9 ] = 0, m[13] = 0,
+            m[2] = 0, m[6] = 0, m[10] = 1, m[14] = 0,
+            m[3] = 0, m[7] = 0, m[11] = 0, m[15] = 1,
+
+
+            this.transformChanged = true;
+            this.colorMatrixChanged = true;
+
+            Object.defineProperties( this, {
+
+                transform: {
+                    get: function () {
+
+                        if( this.transformChanged )
+                        {
+                            var r = this.rotate,
+                                sx = this.scaleX,
+                                sy = this.scaleY,
+                                ox = this.offsetX,
+                                oy = this.offsetY;
+
+                            var cos = Math.cos( r );
+                            var sin = Math.sin( r );
+
+                            var a = cos * sx;
+                            var b = -sin * sx;
+                            var c = this.x - a * ox - b * oy;
+
+                            var d = sin * sy;
+                            var e = cos * sy;
+                            var f = this.y - d * ox - e * oy;
+
+                            var m = this.mat;
+
+                            m[0] = a, m[3] = b, m[6] = c,
+                            m[1] = d, m[4] = e, m[7] = f,
+                            m[2] = 0, m[5] = 0, m[8] = 1;
+                        }
+
+                        return this.mat;
+                    }
+                },
+
+                colorMatrix: {
+                    get: function () {
+
+                        if( this.colorMatrixChanged )
+                        {
+
+                        }
+
+                        return this._colorMatrix;
+                    }
+                },
+            });
         }
 
         DisplayObject.prototype = {
@@ -113,21 +185,29 @@
 
             DisplayObject.call( this );
 
+            this.brightness = new Float32Array([ 0, 0, 0 ]);
+            this.contrast = new Float32Array([ 1, 1, 1 ]);
+            this.grayscale = 0;
+            this.invert = 0;
+
             this.makeBuffer( img.width, img.height );
             this.makeTexture( img );
         }
 
         var p = Bitmap.prototype = Object.create( DisplayObject.prototype );
 
+        p.constructor = Bitmap;
         p.render = function () {
 
             gl.bindTexture( gl.TEXTURE_2D, this.texture );
             gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer );
 
-            gl.uniform2f( program.translate, this.x, this.y );
-            gl.uniform2f( program.offset, this.offsetX, this.offsetY );
-            gl.uniform2f( program.scale, this.scaleX, this.scaleY );
-            gl.uniform1f( program.rotate, this.rotate );
+            gl.uniformMatrix3fv( program.mat, false, this.transform );
+
+            gl.uniform3fv( program.brightness, this.brightness );
+            gl.uniform3fv( program.contrast, this.contrast );
+            gl.uniform1f( program.invert, this.invert );
+            gl.uniform1f( program.grayscale, this.grayscale );
 
             gl.vertexAttribPointer( program.vertex, 2, gl.FLOAT, false, 4 * 4, 0 );
             gl.vertexAttribPointer( program.uv, 2, gl.FLOAT, false, 4 * 4, 4 * 2 );
@@ -160,6 +240,10 @@
 
 
 
+        // ===================================================================================================================
+
+
+
 
         var gl, /* webgl rendering context */
             program, /* program instance */
@@ -187,8 +271,6 @@
             }
 
             onImageComplete( {target: img} );
-
-
         }
 
         function onImageComplete(e) {
@@ -198,7 +280,7 @@
             makeProgram(); /* 프로그램 생성 : 셰이더 attach 및 link */
             makeIndexBuffer();
 
-            makeBitmaps( 20 );
+            makeBitmaps( 1 );
 
             render(); /* 실제 draw */
         }
@@ -231,16 +313,23 @@
                 bitmap.offsetX = bitmap.width / 2;
                 bitmap.offsetY = bitmap.height / 2;
 
-                bitmap.scaleX = bitmap.scaleY = 0.5 + Math.random() / 2;
+                bitmap.x = gl.canvas.width / 2;
+                bitmap.y = gl.canvas.height / 2;
 
-                bitmap.x = gl.canvas.width * Math.random();
-                bitmap.y = gl.canvas.height * Math.random();
+                bitmap.brightness[0] = 0.5;
+                bitmap.brightness[1] = 0.0;
+                bitmap.brightness[2] = 0.0;
 
-                bitmap.rotate = 2 * Math.PI * Math.random();
+                bitmap.contrast[0] = 2;
+                bitmap.contrast[1] = 2;
+                bitmap.contrast[2] = 2;
 
-                bitmap.enterframe = function (self) {
+                bitmap.grayscale = 0.6;
+                bitmap.invert = 0.7;
+
+                bitmap.enterframe = function( self ){
                     //self.rotate += 0.05;
-                }
+                };
 
                 children.push( bitmap );
             }
@@ -299,7 +388,7 @@
 
         function initUniforms() {
 
-            var labels = [ "translate", "scale", "offset", "rotate", "stage" ];
+            var labels = [ "mat", "stage", "translate", "contrast", "grayscale", "brightness", "invert" ];
 
             for (var i = 0; i < labels.length; i++) {
 

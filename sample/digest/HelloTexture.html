@@ -3,15 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Hello Texture</title>
-    <style>
-        #canvas{
-            border: 1px solid #ccc;
-        }
-
-        img{
-            visibility: hidden;
-        }
-    </style>
+    <link rel="stylesheet" type="text/css" href="css/common.css">
 
     <script type="x-shader" id="vs">
 
@@ -75,6 +67,18 @@
             gl.clearColor( 0, 0, 0, 1 ); /* 배경색 지정 */
 
             var img = document.getElementById("img_a");
+
+            if( !img.complete ){
+                img.onload = onImageComplete;
+                return;
+            }
+
+            onImageComplete( {target: img} );
+        }
+
+        function onImageComplete(e) {
+
+            var img = e.target;
 
             makeProgram(); /* 프로그램 생성 : 셰이더 attach 및 link */
             makeBuffer(img.width, img.height); /* vertexBuffer 생성 : 정점 데이터 포함*/

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Instantiation</title>
+    <title>Mouse Event</title>
     <link rel="stylesheet" type="text/css" href="css/common.css">
 
     <script type="x-shader" id="vs">
@@ -12,29 +12,15 @@
 
         varying vec2 vUv;
 
-        uniform vec2 stage;
-        uniform vec2 translate;
-        uniform vec2 scale;
-        uniform vec2 offset;
+        uniform mat3 mat;
 
-        uniform float rotate;
+        uniform vec2 stage;
 
         void main(){
 
             vUv = uv;
 
-            vec2 p = vertex - offset;
-
-            float cos = cos( rotate );
-            float sin = sin( rotate );
-
-            float x = cos * p.x - sin * p.y;
-            float y = sin * p.x + cos * p.y;
-
-            p = vec2( x, y );
-
-            p *= scale;
-            p += translate;
+            vec2 p = ( mat * vec3( vertex, 1 ) ).xy;
 
             p = p / stage * 2.0 - 1.0;
 
@@ -50,9 +36,15 @@
 
         uniform sampler2D tex;
 
+
+        uniform mat4 colorMatrix;
+        uniform float alpha;
+
         void main(){
 
-            gl_FragColor = texture2D( tex, vUv );
+            vec4 pixel = colorMatrix * vec4( texture2D( tex, vUv ).rgb, 1 );
+
+            gl_FragColor = vec4( pixel.rgb, alpha );
         }
 
     </script>
@@ -75,9 +67,129 @@
             this.rotate = 0;
             this.offsetX = 0;
             this.offsetY = 0;
+            this.alpha = 1;
 
             this.width = 0;
             this.height = 0;
+
+            this.mat = new Float32Array(9);
+
+            var m = this.mat;
+
+            m[0] = 1, m[3] = 0, m[6] = 0,
+            m[1] = 0, m[4] = 1, m[7] = 0,
+            m[2] = 0, m[5] = 0, m[8] = 1;
+
+
+            this._colorMatrix = new Float32Array(16);
+
+            m = this._colorMatrix;
+
+            m[0] = 1, m[4] = 0, m[8 ] = 0, m[12] = 0,
+            m[1] = 0, m[5] = 1, m[9 ] = 0, m[13] = 0,
+            m[2] = 0, m[6] = 0, m[10] = 1, m[14] = 0,
+            m[3] = 0, m[7] = 0, m[11] = 0, m[15] = 1;
+
+            this.transformChanged = true;
+            this.colorMatrixChanged = true;
+
+            this._status = "out";
+
+            Object.defineProperties( this, {
+
+                transform: {
+                    get: function () {
+
+                        if( this.transformChanged )
+                        {
+                            var r = this.rotate,
+                                sx = this.scaleX,
+                                sy = this.scaleY,
+                                ox = this.offsetX,
+                                oy = this.offsetY;
+
+                            var cos = Math.cos( r );
+                            var sin = Math.sin( r );
+
+                            var a = cos * sx;
+                            var b = -sin * sx;
+                            var c = this.x - a * ox - b * oy;
+
+                            var d = sin * sy;
+                            var e = cos * sy;
+                            var f = this.y - d * ox - e * oy;
+
+                            var m = this.mat;
+
+                            m[0] = a, m[3] = b, m[6] = c,
+                            m[1] = d, m[4] = e, m[7] = f,
+                            m[2] = 0, m[5] = 0, m[8] = 1;
+                        }
+
+                        return this.mat;
+                    }
+                },
+
+                colorMatrix: {
+                    get: function () {
+
+                        if( this.colorMatrixChanged )
+                        {
+
+                            var _g = this.grayscale;
+                            var m = this._colorMatrix;
+
+                            var a, b, c, d, e, f, g, h, i,
+                                _i = this.invert,
+                                br = this.brightness[0] + _i,
+                                bg = this.brightness[1] + _i,
+                                bb = this.brightness[2] + _i;
+
+                            a = 1 - 2 * _i,  b = 0,           c = 0,
+                            d = 0,          e = 1 - 2 * _i,   f = 0,
+                            g = 0,          h = 0,            i = 1 - 2 * _i;
+
+                            m[0] = a, m[4] = b, m[8 ] = c, m[12] = br,
+                            m[1] = d, m[5] = e, m[9 ] = f, m[13] = bg,
+                            m[2] = g, m[6] = h, m[10] = i, m[14] = bb,
+                            m[3] = 0, m[7] = 0, m[11] = 0, m[15] = 1;
+                        }
+
+                        return this._colorMatrix;
+                    }
+                },
+
+                mouseStatus: {
+                    get: function () {
+                        return this._status;
+                    },
+                    set: function (value) {
+
+                        switch( this._status )
+                        {
+                            case "out":
+
+                                if( value == "move" ){
+                                    this.onmouseover({target:this,type:"onmouseover"});
+                                }
+
+                                break;
+
+                            case "move":
+                                if( value == "out" ) {
+                                    this.onmouseout({target:this,type:"onmouseout"});
+                                }
+                                else if( value == "move" ){
+                                    this.onmousemove({target:this,type:"onmousemove"});
+                                }
+
+                                break;
+                        }
+
+                        this._status = value;
+                    }
+                },
+            });
         }
 
         DisplayObject.prototype = {
@@ -111,6 +223,11 @@
 
         function Bitmap(img) {
 
+            this.brightness = new Float32Array([ 0, 0, 0 ]);
+            this.contrast = new Float32Array([ 1, 1, 1 ]);
+            this.grayscale = 0;
+            this.invert = 0;
+
             DisplayObject.call( this );
 
             this.makeBuffer( img.width, img.height );
@@ -119,15 +236,15 @@
 
         var p = Bitmap.prototype = Object.create( DisplayObject.prototype );
 
+        p.constructor = Bitmap;
         p.render = function () {
 
             gl.bindTexture( gl.TEXTURE_2D, this.texture );
             gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer );
 
-            gl.uniform2f( program.translate, this.x, this.y );
-            gl.uniform2f( program.offset, this.offsetX, this.offsetY );
-            gl.uniform2f( program.scale, this.scaleX, this.scaleY );
-            gl.uniform1f( program.rotate, this.rotate );
+            gl.uniformMatrix3fv( program.mat, false, this.transform );
+            gl.uniformMatrix4fv( program.colorMatrix, false, this.colorMatrix );
+            gl.uniform1f( program.alpha, this.alpha );
 
             gl.vertexAttribPointer( program.vertex, 2, gl.FLOAT, false, 4 * 4, 0 );
             gl.vertexAttribPointer( program.uv, 2, gl.FLOAT, false, 4 * 4, 4 * 2 );
@@ -160,16 +277,22 @@
 
 
 
+        // ===================================================================================================================
+
+
+
 
         var gl, /* webgl rendering context */
             program, /* program instance */
             children = [],
-            indexBuffer; /* index buffer */
+            indexBuffer,
+            rect;
+
 
         function init() {
 
             /* webgl rendering context 객체를 가져옴*/
-            gl = document.getElementById( "canvas" ).getContext( "webgl" );
+            gl = document.getElementById( "canvas" ).getContext( "webgl", { alpha: false } );
             console.log( gl );
 
             initGL();
@@ -178,6 +301,8 @@
         function initGL() {
 
             gl.clearColor( 0, 0, 0, 1 ); /* 배경색 지정 */
+            gl.enable( gl.BLEND );
+            gl.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
 
             img = document.getElementById("img_a");
 
@@ -188,7 +313,40 @@
 
             onImageComplete( {target: img} );
 
+            rect = gl.canvas.getBoundingClientRect();
 
+            gl.canvas.addEventListener( "mousemove", onmove );
+        }
+
+        var currentOver = null;
+
+        function onmove(e) {
+
+            var stageX = e.clientX - rect.left;
+            var stageY = e.clientY - rect.top;
+
+            var child, localX, localY, hit = null;
+
+            for (var i = children.length; i--; ) {
+
+                child = children[i];
+
+                localX = ( stageX + child.scaleX * child.offsetX - child.x ) / child.scaleX;
+                localY = ( stageY + child.scaleY * child.offsetY - child.y ) / child.scaleY;
+
+                if( localX < 0 ||
+                    localY < 0 ||
+                    localX > child.width ||
+                    localY > child.height ) continue;
+
+                hit = child;
+                hit.mouseStatus = "move";
+                break;
+            }
+
+            if( currentOver && currentOver != hit ) currentOver.mouseStatus = "out";
+
+            currentOver = hit;
         }
 
         function onImageComplete(e) {
@@ -198,7 +356,7 @@
             makeProgram(); /* 프로그램 생성 : 셰이더 attach 및 link */
             makeIndexBuffer();
 
-            makeBitmaps( 20 );
+            makeBitmaps( 40 );
 
             render(); /* 실제 draw */
         }
@@ -214,7 +372,7 @@
                 var child = children[i];
 
                 if(child.enterframe)
-                    child.enterframe(child);
+                    child.enterframe(child, ms);
 
                 child.render();
             }
@@ -231,16 +389,25 @@
                 bitmap.offsetX = bitmap.width / 2;
                 bitmap.offsetY = bitmap.height / 2;
 
-                bitmap.scaleX = bitmap.scaleY = 0.5 + Math.random() / 2;
-
                 bitmap.x = gl.canvas.width * Math.random();
                 bitmap.y = gl.canvas.height * Math.random();
 
-                bitmap.rotate = 2 * Math.PI * Math.random();
+                bitmap.alpha = i / len * 0.8 + 0.2;
+                bitmap.scaleX = bitmap.scaleY = bitmap.alpha * 0.5;
 
-                bitmap.enterframe = function (self) {
-                    //self.rotate += 0.05;
+                bitmap.enterframe = function( self, ms ){
+                    self.grayscale = ( Math.cos( ms / 500 ) + 1 ) / 2;
+                };
+
+                bitmap.onmouseover = function(e){
+                    e.target.invert = 1;
                 }
+                bitmap.onmouseout = function(e){
+                    e.target.invert = 0;
+                }
+                bitmap.onmousemove = function (e) {
+                    //console.log( "move" );
+                };
 
                 children.push( bitmap );
             }
@@ -299,7 +466,7 @@
 
         function initUniforms() {
 
-            var labels = [ "translate", "scale", "offset", "rotate", "stage" ];
+            var labels = [ "mat", "stage", "colorMatrix", "alpha" ];
 
             for (var i = 0; i < labels.length; i++) {
 
