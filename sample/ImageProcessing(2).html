@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Image Processing with Color matrix</title>
+    <link rel="stylesheet" type="text/css" href="css/common.css">
+
+    <script type="x-shader" id="vs">
+
+        attribute vec2 vertex;
+        attribute vec2 uv;
+
+        varying vec2 vUv;
+
+        uniform mat3 mat;
+
+        uniform vec2 stage;
+
+        void main(){
+
+            vUv = uv;
+
+            vec2 p = ( mat * vec3( vertex, 1 ) ).xy;
+
+            p = p / stage * 2.0 - 1.0;
+
+            gl_Position = vec4( p.x, -p.y, 0, 1 );
+        }
+
+    </script>
+    <script type="x-shader" id="fs">
+
+        precision highp float;
+
+        varying vec2 vUv;
+
+        uniform sampler2D tex;
+        uniform bool applyPointColor;
+        uniform vec3 pointColor;
+
+        uniform mat4 colorMatrix;
+
+        const float distance = 0.5;
+
+        vec3 rgbToHSV( vec3 rgb ){
+
+            float h, s, v;
+
+            float cmax = max( rgb.r, max( rgb.g, rgb.b ) );
+            float cmin = min( rgb.r, min( rgb.g, rgb.b ) );
+            float dt = cmax - cmin;
+
+            if( dt == 0.0 )
+            {
+                h = 0.0;
+            }
+            else if( cmax == rgb.r )
+            {
+                float t = ( rgb.g - rgb.b ) / dt;
+                h = t - floor( t / 6.0 );
+            }
+            else if( cmax == rgb.g )
+            {
+                h = 60.0 * ( (rgb.b - rgb.r) / dt + 2.0 );
+            }
+            else if( cmax == rgb.b )
+            {
+                h = 60.0 * ( (rgb.r - rgb.g) / dt + 4.0 );
+            }
+
+            if( cmax == 0.0 )
+            {
+                s = 0.0;
+            }
+            else
+            {
+                s = dt / cmax;
+            }
+
+            v = cmax;
+
+            return vec3( h, s, v );
+        }
+
+
+        void main(){
+
+            vec4 pixel = colorMatrix * vec4( texture2D( tex, vUv ).rgb, 1 );
+
+            if( applyPointColor )
+            {
+                float r = pixel.r;
+                float g = pixel.g;
+                float b = pixel.b;
+
+                float _g = 0.2 * r + 0.7 * g + 0.1 * b;
+
+                vec3 hsv = rgbToHSV( vec3( r, g, b ) );
+                vec3 hsv0 = rgbToHSV( pointColor );
+
+                if( abs( hsv0.r - hsv.r ) > 20.0 /*|| abs( hsv0.g - hsv.g ) > 0.2*/ )
+                {
+                    pixel = vec4( _g, _g, _g , 1.0 );
+                }
+            }
+
+            gl_FragColor = pixel;
+        }
+
+    </script>
+
+</head>
+<body>
+<div class="wrapper">
+    <canvas id="canvas" width="400" height="300"></canvas>
+    <img src="img/c.jpg" alt="" id="img_a"/>
+
+    <script type="text/javascript">
+
+        function Matrix(m11, m12, m13, m21, m22, m23) {
+
+            this.raw = new Float32Array(9);
+
+            this.setTo(
+                m11 || 1, m12 || 0, m13 || 0,
+                m21 || 0, m22 || 1, m23 || 0
+            );
+        }
+
+        Matrix.prototype = {
+            constructor: Matrix,
+
+            setTo: function (m11, m12, m13, m21, m22, m23) {
+
+                var m = this.raw;
+
+                m[0] = m11, m[3] = m12, m[6] = m13,
+                m[1] = m21, m[4] = m22, m[7] = m23,
+                m[2] =   0, m[5] =   0, m[8] =   1;
+            },
+
+            setTov: function (v) {
+
+                var m = this.raw;
+
+                m[0] = v[0], m[3] = v[3], m[6] = v[6],
+                m[1] = v[1], m[4] = v[4], m[7] = v[7],
+                m[2] =    0, m[5] =    0, m[8] =    1;
+            },
+
+            append: function( b ){
+                //return b * this;
+            },
+
+            preppend: function( b ){
+                //return this * b;
+            },
+
+            transform: function ( v, out ) {
+
+                out = out || {};
+
+                var m = this.raw;
+                var x = v.x;
+                var y = v.y;
+
+                var a = m[0], b = m[3], c = m[6],
+                    d = m[1], e = m[4], f = m[7];
+                        //0           0          1
+                out.x = a * x + b * y + c;
+                out.y = d * x + e * y + f;
+
+                return out;
+            },
+
+            invert: function () {
+
+                var m = this.raw;
+
+                var a = m[0], b = m[3], c = m[6],
+                    d = m[1], e = m[4], f = m[7];
+
+                var det = a * e - b * d;
+
+                if( det == 0 ) return;
+
+                det = 1 / det;
+
+                m[0] =  e * det, m[3] =  -b * det, m[6] = ( b*f - c*e ) * det,
+                m[1] = -d * det, m[4] =   a * det, m[7] = ( c*d - a*f ) * det,
+                m[2] =        0, m[5] =         0, m[8] = ( a*e - b*d ) * det;
+            },
+        };
+
+
+        function Matrix3D(raw) {
+
+            this._raw = new Float32Array( 16 );
+
+            if( raw )
+                this.setTov(raw);
+            else
+                this.identity();
+            
+            Object.defineProperties( this, {
+
+                raw: {
+                    get: function () {
+                        return this._raw;
+                    }
+                },
+            });
+        }
+
+        Matrix3D.prototype = {
+
+            constructor: Matrix3D,
+
+            setTo: function (
+                m11, m12, m13, m14,
+                m21, m22, m23, m24,
+                m31, m32, m33, m34,
+                m41, m42, m43, m44 ) {
+
+                var m = this._raw;
+
+                m[0] = m11, m[4] = m12, m[8 ] = m13, m[12] = m14,
+                m[1] = m21, m[5] = m22, m[9 ] = m23, m[13] = m24,
+                m[2] = m31, m[6] = m32, m[10] = m33, m[14] = m34,
+                m[3] = m41, m[7] = m42, m[11] = m43, m[15] = m44;
+            },
+
+            setTov: function( raw ){
+
+                var m = raw;
+
+                this.setTo(
+                    m[0], m[4], m[8 ], m[12],
+                    m[1], m[5], m[9 ], m[13],
+                    m[2], m[6], m[10], m[14],
+                    m[3], m[7], m[11], m[15]
+                );
+            },
+
+            identity: function () {
+                var m = this._raw;
+
+                m[0] = 1, m[4] = 0, m[8 ] = 0, m[12] = 0,
+                m[1] = 0, m[5] = 1, m[9 ] = 0, m[13] = 0,
+                m[2] = 0, m[6] = 0, m[10] = 1, m[14] = 0,
+                m[3] = 0, m[7] = 0, m[11] = 0, m[15] = 1;
+            },
+
+            /* return mat3D x this */
+            append: function (mat3D) {
+
+                var a = mat3D.raw;
+                var b = this.raw;
+
+                var a11 = a[0], a12 = a[4], a13 = a[8 ], a14 = a[12],
+                    a21 = a[1], a22 = a[5], a23 = a[9 ], a24 = a[13],
+                    a31 = a[2], a32 = a[6], a33 = a[10], a34 = a[14],
+                    a41 = a[3], a42 = a[7], a43 = a[11], a44 = a[15],
+
+                    b11 = b[0], b12 = b[4], b13 = b[8 ], b14 = b[12],
+                    b21 = b[1], b22 = b[5], b23 = b[9 ], b24 = b[13],
+                    b31 = b[2], b32 = b[6], b33 = b[10], b34 = b[14],
+                    b41 = b[3], b42 = b[7], b43 = b[11], b44 = b[15];
+
+                b[0 ] = a11 * b11 + a12 * b21 + a13 * b31 + a14 * b41;
+                b[4 ] = a11 * b12 + a12 * b22 + a13 * b32 + a14 * b42;
+                b[12] = a11 * b14 + a12 * b24 + a13 * b34 + a14 * b44;
+                b[8 ] = a11 * b13 + a12 * b23 + a13 * b33 + a14 * b43;
+
+                b[1 ] = a21 * b11 + a22 * b21 + a23 * b31 + a24 * b41;
+                b[5 ] = a21 * b12 + a22 * b22 + a23 * b32 + a24 * b42;
+                b[9 ] = a21 * b13 + a22 * b23 + a23 * b33 + a24 * b43;
+                b[13] = a21 * b14 + a22 * b24 + a23 * b34 + a24 * b44;
+
+                b[2 ] = a31 * b11 + a32 * b21 + a33 * b31 + a34 * b41;
+                b[6 ] = a31 * b12 + a32 * b22 + a33 * b32 + a34 * b42;
+                b[10] = a31 * b13 + a32 * b23 + a33 * b33 + a34 * b43;
+                b[14] = a31 * b14 + a32 * b24 + a33 * b34 + a34 * b44;
+
+                b[3 ] = a41 * b11 + a42 * b21 + a43 * b31 + a44 * b41;
+                b[7 ] = a41 * b12 + a42 * b22 + a43 * b32 + a44 * b42;
+                b[11] = a41 * b13 + a42 * b23 + a43 * b33 + a44 * b43;
+                b[15] = a41 * b14 + a42 * b24 + a43 * b34 + a44 * b44;
+            },
+
+            /* return this x a */
+            preppend: function (a) {
+
+                //
+            },
+        }
+
+
+        function DisplayObject() {
+
+            this._x = 0;
+            this._y = 0;
+            this._scaleX = 1;
+            this._scaleY = 1;
+            this._rotate = 0;
+            this._offsetX = 0;
+            this._offsetY = 0;
+
+            this.width = 0;
+            this.height = 0;
+
+            this.mat = new Matrix( 1, 0, 0,  0, 1, 0 );
+
+            this._colorMatrix = new Matrix3D();
+
+            this.transformChanged = true;
+            this.colorMatrixChanged = true;
+
+            Object.defineProperties( this, {
+
+                "x": {
+                    get: function () {
+                        return this._x
+                    },
+                    set: function (value) {
+                        if(this._x == value) return;
+                        this._x = value;
+                        this.transformChanged = true;
+                    }
+                },
+                "y": {
+                    get: function () {
+                        return this._y;
+                    },
+                    set: function (value) {
+                        if(this._y == value) return;
+
+                        this._y = value;
+                        this.transformChanged = true;
+                    }
+                },
+                "scaleX": {
+                    get: function () {
+                        return this._scaleX;
+                    },
+                    set: function (value) {
+                        if(this._scaleX == value) return;
+
+                        this._scaleX = value;
+                        this.transformChanged = true;
+                    }
+                },
+                "scaleY": {
+                    get: function () {
+                        return this._scaleY;
+                    },
+                    set: function (value) {
+                        if(this._scaleY == value) return;
+
+                        this._scaleY = value;
+                        this.transformChanged = true;
+                    }
+                },
+
+                "offsetX": {
+                    get: function () {
+                        return this._offsetX;
+                    },
+                    set: function (value) {
+                        if(this._offsetX == value) return;
+
+                        this._offsetX = value;
+                        this.transformChanged = true;
+                    }
+                },
+                "offsetY": {
+                    get: function () {
+                        return this._offsetY;
+                    },
+                    set: function (value) {
+                        if(this._offsetY == value) return;
+
+                        this._offsetY = value;
+                        this.transformChanged = true;
+                    }
+                },
+
+                "rotate": {
+                    get: function () {
+                        return this._rotate;
+                    },
+                    set: function (value) {
+                        if(this._rotate == value) return;
+
+                        this._rotate = value;
+                        this.transformChanged = true;
+                    }
+                },
+
+                transform: {
+                    get: function () {
+
+                        if( this.transformChanged )
+                        {
+                            var a, b, c, d, e, f;
+
+                            var r = this.rotate,
+                                sx = this.scaleX,
+                                sy = this.scaleY,
+                                ox = this.offsetX,
+                                oy = this.offsetY;
+
+                            if( this.rotate == 0 ){
+
+                                a = sx;
+                                b = 0;
+                                c = this.x - ox * sx;
+
+                                d = 0;
+                                e = sy;
+                                f = this.y - oy * sy;
+                            }
+                            else{
+
+                                var cos = Math.cos( r );
+                                var sin = Math.sin( r );
+
+                                a = cos * sx;
+                                b = -sin * sx;
+                                c = this.x - a * ox - b * oy;
+
+                                d = sin * sy;
+                                e = cos * sy;
+                                f = this.y - d * ox - e * oy;
+                            }
+
+                            this.mat.setTo(
+                                a, b, c,
+                                d, e, f
+                            );
+
+                            this.transformChanged = false;
+                        }
+
+                        return this.mat;
+                    }
+                },
+
+                colorMatrix: {
+                    get: function () {
+
+                        var matrices = [];
+
+                        if( this.colorMatrixChanged )
+                        {
+
+                            var _g = this.grayscale;
+
+                            var a, b, c, d, e, f, g, h, i, br, bg, bb;
+
+                            a = 1 - 0.8 * _g,   b = 0.7 * _g,       c = 0.1 * _g,
+                            d = 0.2 * _g,       e = 1 - 0.3 * _g,   f = 0.1 * _g,
+                            g = 0.2 * _g,       h = 0.7 * _g,       i = 1 - 0.9 * _g;
+
+                            var grayscaleMatrix = new Matrix3D();
+
+                            grayscaleMatrix.setTo(
+                                a, b, c, 0,
+                                d, e, f, 0,
+                                g, h, i, 0,
+                                0, 0, 0, 1
+                            );
+
+                            var contrastMatrix = new Matrix3D();
+
+                            var translate = ( -0.5 * this.contrast + 0.5 );
+
+                            contrastMatrix.setTo(
+                                this.contrast, 0, 0, translate,
+                                0, this.contrast, 0, translate,
+                                0, 0, this.contrast, translate,
+                                0, 0, 0, 1
+                            );
+
+                            var swapChannel = new Matrix3D();
+
+                            swapChannel.setTo(
+                                    0, 1, 0, 0,
+                                    1, 0, 0, 0,
+                                    0, 0, 1, 0,
+                                    0, 0, 0, 1
+                            );
+
+                            var saturationMatrix = new Matrix3D();
+
+                            var _s = this.saturation;
+                            var sr = ( 1 - _s ) * 0.2;
+                            var sg = ( 1 - _s ) * 0.7;
+                            var sb = ( 1 - _s ) * 0.1;
+
+                            saturationMatrix.setTo(
+                                sr + _s, sg,      sb,       0,
+                                sr,      sg + _s, sb,       0,
+                                sr,      sg,      sb + _s,  0,
+                                0,       0,       0,        1
+                            );
+
+                            var colorBalance = new Matrix3D();
+                            var balance = this.colorBalance;
+
+                            colorBalance.setTo(
+                                1 + balance[0], 0, 0, 0,
+                                0, 1 + balance[1], 0, 0,
+                                0, 0, 1 + balance[2], 0,
+                                0, 0, 0, 1
+                            );
+
+                            matrices.push( contrastMatrix );
+                            matrices.push( saturationMatrix );
+                            matrices.push( contrastMatrix );
+//                            matrices.push( colorBalance );
+                        }
+
+                        var e = matrices[0] || new Matrix3D();
+
+                        for (var i = 1; i < matrices.length; i++) {
+
+                            e.append( matrices[i] );
+                        }
+
+                        this._colorMatrix.setTov( e.raw );
+
+                        return this._colorMatrix;
+                    }
+                },
+            });
+        }
+
+        DisplayObject.prototype = {
+            constructor: DisplayObject,
+
+            render: function () {
+
+                // override
+            },
+
+            makeBuffer: function ( w, h ) {
+
+                if( !this.buffer )
+                    this.buffer = gl.createBuffer();
+
+                this.bufferData = new Float32Array([
+                        0, 0,   0, 0,
+                        w, 0,   1, 0,
+                        w, h,   1, 1,
+                        0, h,   0, 1,
+                ]);
+
+                this.width = w;
+                this.height = h;
+
+                gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer );
+                gl.bufferData( gl.ARRAY_BUFFER, this.bufferData, gl.DYNAMIC_DRAW );
+                gl.bindBuffer( gl.ARRAY_BUFFER, null );
+            },
+        };
+
+        function Bitmap(img) {
+
+            this.brightness = 0;//new Float32Array([ 0, 0, 0 ]);
+            this.contrast = 1;//new Float32Array([ 1, 1, 1 ]);
+            this.grayscale = 0;
+            this.invert = 0;
+            this.saturation = 1;
+            this.colorBalance = new Float32Array(3);
+            this.pointColor = new Float32Array(3);
+            this.applyPointColor = false;
+
+            DisplayObject.call( this );
+
+            this.makeBuffer( img.width, img.height );
+            this.makeTexture( img );
+        }
+
+        var p = Bitmap.prototype = Object.create( DisplayObject.prototype );
+
+        p.constructor = Bitmap;
+        p.render = function () {
+
+            gl.bindTexture( gl.TEXTURE_2D, this.texture );
+            gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer );
+
+            gl.uniformMatrix3fv( program.mat, false, this.transform.raw );
+            gl.uniformMatrix4fv( program.colorMatrix, false, this.colorMatrix.raw );
+            gl.uniform1f( program.applyPointColor, this.applyPointColor );
+            gl.uniform3fv( program.pointColor, this.pointColor );
+
+            gl.vertexAttribPointer( program.vertex, 2, gl.FLOAT, false, 4 * 4, 0 );
+            gl.vertexAttribPointer( program.uv, 2, gl.FLOAT, false, 4 * 4, 4 * 2 );
+
+            gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0 );
+        };
+
+        p.makeTexture = function (img) {
+
+            if( this.texture )
+                this.disposeTexture();
+
+            this.img = img;
+
+            this.texture = gl.createTexture();
+
+            gl.bindTexture( gl.TEXTURE_2D, this.texture );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+                gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR );
+            gl.texImage2D( gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.img );
+            gl.bindTexture( gl.TEXTURE_2D, null );
+        };
+
+        p.disposeTexture = function () {
+            gl.deleteTexture( this.texture );
+        };
+
+
+
+
+        // ===================================================================================================================
+
+
+
+
+        var gl, /* webgl rendering context */
+            program, /* program instance */
+            children = [],
+            indexBuffer; /* index buffer */
+
+        function init() {
+
+            /* webgl rendering context 객체를 가져옴*/
+            gl = document.getElementById( "canvas" ).getContext( "webgl" );
+            console.log( gl );
+
+            initGL();
+        }
+
+        function initGL() {
+
+            gl.clearColor( 0, 0, 0, 1 ); /* 배경색 지정 */
+
+            img = document.getElementById("img_a");
+
+            if( !img.complete ){
+                img.onload = onImageComplete;
+                return;
+            }
+
+            onImageComplete( {target: img} );
+        }
+
+        var imgData;
+
+        function onImageComplete(e) {
+
+            var img = e.target;
+
+            makeProgram(); /* 프로그램 생성 : 셰이더 attach 및 link */
+            makeIndexBuffer();
+
+            makeBitmaps( 1 );
+
+            var canvas = document.createElement( "canvas" );
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            var context = canvas.getContext("2d");
+            context.drawImage( img, 0, 0, img.width, img.height );
+            imgData = context.getImageData(0, 0, img.width, img.height);
+
+            console.log( imgData );
+
+            initEvents();
+            render(); /* 실제 draw */
+        }
+
+        function initEvents() {
+            var canvas = gl.canvas;
+
+            var r = canvas.getBoundingClientRect();
+            ox = r.left;
+            oy = r.top;
+
+            canvas.addEventListener( "mousemove", onMove );
+        }
+
+        var ox, oy, $m = new Matrix(), $p = {x:0, y:0}, $r = {x:0, y:0};
+        function onMove(e) {
+
+            var stageX = e.clientX - ox;
+            var stageY = e.clientY - oy;
+
+            var t = stageX / gl.canvas.width;
+            var child = children[0];
+
+            $p.x = stageX;
+            $p.y = stageY;
+
+            for (var i = 0; i < children.length; ++i) {
+
+                var child = children[i];
+
+                $m.setTov( child.transform.raw );
+                $m.invert();
+
+                $m.transform( $p, $r );
+
+                if($r.x < 0 || $r.y < 0 || $r.x > child.width || $r.y > child.height )
+                {
+                    child.applyPointColor = false;
+                    continue;
+                }
+
+                child.applyPointColor = true;
+
+                var _x = 4 * $r.x;
+                var _y = 4 * $r.y * child.width;
+                var _i = _x + _y;
+
+                var data = imgData.data;
+
+                child.pointColor[0] = data[_i  ] / 255;
+                child.pointColor[1] = data[_i+1] / 255;
+                child.pointColor[2] = data[_i+2] / 255;
+            }
+        }
+
+        function render( ms ) {
+
+            requestAnimationFrame( render );
+
+            gl.clear( gl.COLOR_BUFFER_BIT );
+
+            for (var i = 0; i < children.length; i++) {
+
+                var child = children[i];
+
+                if(child.enterframe)
+                    child.enterframe(child, ms);
+
+                child.render();
+            }
+        }
+
+        function makeBitmaps( len ) {
+
+            var img = document.getElementById( "img_a" );
+
+            for (var i = 0; i < len; i++) {
+
+                var bitmap = new Bitmap( img );
+
+                bitmap.offsetX = bitmap.width / 2;
+                bitmap.offsetY = bitmap.height / 2;
+
+                bitmap.x = gl.canvas.width / 2;
+                bitmap.y = gl.canvas.height / 2;
+
+                bitmap.enterframe = function( self, ms ){
+                    //self.grayscale = ( Math.cos( ms / 500 ) + 1 ) / 2;
+                    //self.contrast = ( Math.cos( ms / 500 ) + 1 );
+                };
+
+                children.push( bitmap );
+            }
+        }
+
+        function makeProgram() {
+
+            program = gl.createProgram();
+
+            var vsShader = gl.createShader( gl.VERTEX_SHADER );
+            var fsShader = gl.createShader( gl.FRAGMENT_SHADER );
+
+            var vertexShaderSource = document.getElementById("vs").innerHTML;
+            var fragmentShaderSource = document.getElementById("fs").innerHTML;
+
+            gl.shaderSource( vsShader, vertexShaderSource );
+            gl.shaderSource( fsShader, fragmentShaderSource );
+
+            gl.compileShader( vsShader );
+
+            if( !gl.getShaderParameter( vsShader, gl.COMPILE_STATUS ) )
+                throw new Error( "VERTEX_SHADER COMPILE ERROR:" + gl.getShaderInfoLog( vsShader ) );
+
+            gl.compileShader( fsShader );
+
+            if( !gl.getShaderParameter( fsShader, gl.COMPILE_STATUS ) )
+                throw new Error( "FRAGMENT_SHADER COMPILE ERROR:" + gl.getShaderInfoLog( fsShader ) );
+
+
+            gl.attachShader( program, vsShader );
+            gl.attachShader( program, fsShader );
+
+            gl.linkProgram( program );
+
+            if( !gl.getProgramParameter( program, gl.LINK_STATUS ) )
+                throw new Error( "LINK ERROR : " + gl.getProgramInfoLog( program ) );
+
+            gl.useProgram( program );
+
+            initAttributes();
+            initUniforms();
+        }
+
+        function initAttributes() {
+
+            var labels = [ "vertex", "uv" ];
+
+            for (var i = 0; i < labels.length; i++) {
+
+                var p = labels[i];
+
+                program[p] = gl.getAttribLocation( program, p );
+                gl.enableVertexAttribArray( program[p] );
+            }
+        }
+
+        function initUniforms() {
+
+            var labels = [ "mat", "stage", "colorMatrix", "applyPointColor", "pointColor" ];
+
+            for (var i = 0; i < labels.length; i++) {
+
+                var p = labels[i];
+
+                program[p] = gl.getUniformLocation( program, p );
+            }
+
+            gl.uniform2f( program.stage, gl.canvas.width, gl.canvas.height );
+        }
+
+        function makeIndexBuffer(){
+
+            indexBuffer = gl.createBuffer();
+
+            var indexBufferData = new Uint16Array([
+                    0, 1, 2,    0, 2, 3
+            ]);
+
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, indexBuffer );
+            gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, indexBufferData, gl.STATIC_DRAW );
+        }
+
+
+        function rgbToHSV( r, g, b ) {
+
+            var max = Math.max(r,g,b);
+            var min = Math.min(r,g,b);
+            var dt = max - min;
+
+            var hue;
+
+            if( dt == 0 )
+            {
+                hue = 0;
+            }
+            else if( max == r )
+            {
+                hue = 60 * ( ( g - b ) / dt % 6 );
+            }
+            else if( max == g )
+            {
+                hue = 60 * ( ( b - r ) / dt + 2 );
+            }
+            else if( max == b )
+            {
+                hue = 60 * ( ( r - g ) / dt + 4 );
+            }
+
+            var saturation;
+
+            if( max == 0 ){
+                saturation = 0;
+            }
+            else
+            {
+                saturation = dt / max;
+            }
+
+            var value = max;
+
+            console.log( hue, saturation, value );
+        }
+        
+
+        window.onload = init;
+
+    </script>
+</div>
+</body>
+</html>
